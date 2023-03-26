@@ -23,12 +23,13 @@ impl Arguments {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(untagged)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(tag = "type")]
 pub enum TerminalStream {
     StandardInput(String),
     StandardOutput(String),
-    StandardError(String)
+    StandardError(String),
+    EndOfOutput
 }
 
 //impl Serialize for TerminalStream {
@@ -44,7 +45,7 @@ pub enum TerminalStream {
 //    }
 //}
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TerminalFeed {
     pub std_cout: Vec<TerminalStream>,
     pub std_cin: Vec<TerminalStream>,
@@ -114,9 +115,10 @@ impl ExecutorBuilder {
 
     pub fn build(self, sender_id: Uuid) -> Executor {
         let throughput = broadcast::channel::<TerminalStream>(100);
+        let id = Uuid::new_v4();
 
         Executor {
-            id: Uuid::new_v4(),
+            id: id,
             broadcast: throughput,
             language: self.language.expect("[BUILDER]: Could not retrieve language, value not set."),
             src_file: self.src_file.expect("[BUILDER]: Could not retrieve source file, value not set."),
@@ -132,7 +134,7 @@ impl ExecutorBuilder {
                 time_completed: None
             },
             sender_id,
-            allocated_dir: format!(""),
+            allocated_dir: format!("{}/{}", sender_id.to_string(), id.to_string()),
             commandline_arguments: Arguments::parse(self.arguments.unwrap_or(format!("")))
         }
     }

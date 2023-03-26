@@ -1,9 +1,12 @@
+use std::process::ExitStatus;
+
 use crate::exec::Executor;
 use phf::{Map, phf_map};
+use serde::{Serialize, Deserialize};
 use crate::lang;
 use tokio::sync::MutexGuard;
 
-type LanguageExecutor = fn(MutexGuard<Executor>) -> Result<MutexGuard<Executor>, RuntimeError>;
+type LanguageExecutor = fn(MutexGuard<Executor>) -> Result<ExitStatus, RuntimeError>;
 
 static LANGUAGES: Map<&'static str, LanguageExecutor> = phf_map! {
     "python" => lang::python::run,
@@ -16,10 +19,10 @@ static LANGUAGES: Map<&'static str, LanguageExecutor> = phf_map! {
 
 #[derive(Debug)]
 pub enum RuntimeError {
-    NoExecutor, Capture(&'static str)
+    NoExecutor, Capture(String), WriteFailed(String)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum Languages {
     Python,
     Javascript,
@@ -41,7 +44,7 @@ impl Languages {
         }
     }
 
-    pub fn run(mut exec: MutexGuard<Executor>) -> Result<MutexGuard<Executor>, RuntimeError> {
+    pub fn run(exec: MutexGuard<Executor>) -> Result<ExitStatus, RuntimeError> {
         match LANGUAGES.get(Self::to_string(&exec.language)) {
             Some(executor) => {
                 executor(exec)

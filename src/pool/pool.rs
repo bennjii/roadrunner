@@ -1,5 +1,7 @@
 use crate::runner::{Locked, GlobalState};
 use futures_timer::Delay;
+use tokio::join;
+use tokio::sync::mpsc::UnboundedSender;
 use std::time::Duration;
 use crate::exec::{Executor, TerminalStream, TerminalFeed};
 use crate::lang::Languages;
@@ -26,7 +28,20 @@ impl Pool {
 
                     if let Some(task) = task_queue.pop_front() {
                         // Have some task to perform.
-                        let res = self.execute(task.clone(), conf_clone.clone()).await;
+                        println!("[POOL]: Found task to perform");
+
+                        drop(task_queue);
+                        
+                        let sid = task.lock().await.sender_id.clone();
+                        let sender = config_lock
+                            .clients.lock().await
+                            .get(&sid.to_string()).unwrap()
+                            .sender.clone();
+
+                        println!("[POOL]: Got sender, starting!");
+
+                        let res = self.execute(task.clone(), sender).await;
+                        println!("[POOL]: Ended with output, {:?}", res);
                         task.lock().await.terminal_feed = res;
                     }else {
                         // Sleep Queue
@@ -40,66 +55,75 @@ impl Pool {
         }).await.unwrap();
     }
 
-    pub async fn execute(&self, locked_task: Locked<Executor>, config: Locked<GlobalState>) -> TerminalFeed {
-        let mut tx2 = locked_task.lock().await.broadcast.0.subscribe();
+    pub async fn execute(&self, locked_task: Locked<Executor>, sender: UnboundedSender<Message>) -> TerminalFeed {
+        let mut tx2 = locked_task.lock().await.broadcast.0.clone().subscribe();
+        println!("[EXEC]: Performing task from sender");
 
         let sender_id = locked_task.lock().await.sender_id.clone();
-        let sender = config.lock().await.runners.lock().await.get(&sender_id.to_string()).unwrap().sender.clone();
-
         drop(sender_id);
 
-        let spwn = tokio::spawn(async move {
+        tokio::spawn(async move {
             let unlkd = locked_task.lock().await;
+            let bcst = unlkd.broadcast.0.clone();
             let name = unlkd.id.clone();
 
-            match Languages::run(unlkd) {
-                Ok(_) => {
+            let opt = match Languages::run(unlkd) {
+                Ok(val) => {
                     println!("[PROG:{}]: Completed Execution.", name);
+                    bcst.send(TerminalStream::EndOfOutput).unwrap();
+                    Ok(val)
                 }
                 Err(err) => {
                     println!("[PROG:{}]: Runtime Error {:?}", name, err);
+                    bcst.send(TerminalStream::EndOfOutput).unwrap();
+                    Err(err)
                 }
-            }
+            };
+
+            opt
         });
 
         // We can listen to the stream of inputs/outputs
-        let result_feed: TerminalFeed = tokio::spawn(async move {
-            let mut feed = TerminalFeed {
-                std_cout: vec![],
-                std_cin: vec![],
-                std_err: vec![]
-            };
+        // let feed_handler = tokio::spawn(async move {
+        let mut feed = TerminalFeed {
+            std_cout: vec![],
+            std_cin: vec![],
+            std_err: vec![]
+        };
 
-            while !spwn.is_finished() {
-                match tx2.recv().await {
-                    Ok(terminal_stream) => {
-                        // Send to websocket listener
-                        let as_string = serde_json::to_string(&terminal_stream).unwrap();
-                        sender.clone().unwrap().send(Message::text(as_string)).unwrap();
+        loop {
+            match tx2.recv().await {
+                Ok(terminal_stream) => {
+                    // Send to websocket listener
+                    let as_string = serde_json::to_string(&terminal_stream).unwrap();
+                    println!("[STREAM]: Sending value, '{}' to ws", as_string);
+                    sender.send(Message::text(as_string)).unwrap();
 
-                        // Push into logs
-                        match terminal_stream {
-                            TerminalStream::StandardOutput(val) => {
-                                feed.std_cout.push(TerminalStream::StandardOutput(val))
-                            }
-                            TerminalStream::StandardError(val) => {
-                                feed.std_err.push(TerminalStream::StandardError(val))
-                            }
-                            TerminalStream::StandardInput(val) => {
-                                feed.std_cin.push(TerminalStream::StandardInput(val))
-                            }
-                        };
-                    }
-                    Err(_) => {
-                        println!("[TERM]: Poor recieve.")
-                        // No new input
-                    }
+                    // Push into logs
+                    match terminal_stream {
+                        TerminalStream::StandardOutput(val) => {
+                            feed.std_cout.push(TerminalStream::StandardOutput(val));
+                        },
+                        TerminalStream::StandardError(val) => {
+                            feed.std_err.push(TerminalStream::StandardError(val));
+                        },
+                        TerminalStream::StandardInput(val) => {
+                            feed.std_cin.push(TerminalStream::StandardInput(val));
+                        },
+                        TerminalStream::EndOfOutput => break
+                    };
                 }
-            }
+                Err(_) => {
+                    println!("[TERM]: Poor receive.");
+                    // No new input
+                }
+            };
+        }
 
-            feed
-        }).await.unwrap();
+        println!("[EXEC]: Execution Complete.");
 
-        result_feed
+        // let (_, result_feed) = join!(spwn, feed_handler);
+
+        feed
     }
 }

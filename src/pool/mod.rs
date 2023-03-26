@@ -1,3 +1,3 @@
-pub use self::pool::*;
+pub use pool::*;
 
 mod pool;

@@ -1,4 +1,4 @@
-pub use self::lang::*;
+pub use lang::*;
 
 mod lang;
 

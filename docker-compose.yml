@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+   roadrunner:
+     image: bennjii/roadrunner
+     secrets:
+       - private_key
+       - certificate
+     ports:
+      - 8443:8443/udp
+      - 80:80
+      - 443:443
+
+
+secrets:
+   certificate:
+     file: cert.pem
+   private_key:
+     file: key.pem
+
+volumes:
+    db_data:

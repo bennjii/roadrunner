@@ -1,3 +1,3 @@
-pub use self::exec::*;
+pub use exec::*;
 
 mod exec;

@@ -1,3 +1,3 @@
-pub use self::runner::*;
+pub use runner::*;
 
 mod runner;
