@@ -17,9 +17,15 @@ static LANGUAGES: Map<&'static str, LanguageExecutor> = phf_map! {
 //    "cpp" => lang::cpp::run,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RuntimeError {
     NoExecutor, Capture(String), WriteFailed(String)
+}
+
+impl RuntimeError {
+    pub fn to_string(self) -> String {
+        format!("")
+    }
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]

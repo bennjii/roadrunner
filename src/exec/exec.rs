@@ -2,7 +2,7 @@ use tokio::sync::broadcast::{Sender, Receiver};
 use tokio::sync::broadcast;
 use crate::lang::Languages;
 use chrono::offset::Utc;
-use chrono::DateTime;
+use chrono::{DateTime};
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 
@@ -24,12 +24,28 @@ impl Arguments {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(tag = "type")]
-pub enum TerminalStream {
-    StandardInput(String),
-    StandardOutput(String),
-    StandardError(String),
+pub enum TerminalStreamType {
+    StandardInput,
+    StandardOutput,
+    StandardError,
     EndOfOutput
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct TerminalStream {
+    pub terminal_type: TerminalStreamType,
+    pub value: String,
+    pub timestamp: DateTime<Utc>
+}
+
+impl TerminalStream {
+    pub fn new(terminal_type: TerminalStreamType, value: String) -> Self {
+        TerminalStream { 
+            terminal_type: terminal_type, 
+            value: value, 
+            timestamp: Utc::now()
+        }
+    }
 }
 
 //impl Serialize for TerminalStream {
@@ -49,7 +65,8 @@ pub enum TerminalStream {
 pub struct TerminalFeed {
     pub std_cout: Vec<TerminalStream>,
     pub std_cin: Vec<TerminalStream>,
-    pub std_err: Vec<TerminalStream>
+    pub std_err: Vec<TerminalStream>,
+    pub output: Vec<TerminalStream>
 }
 
 #[derive(Clone, Copy)]
@@ -124,8 +141,9 @@ impl ExecutorBuilder {
             src_file: self.src_file.expect("[BUILDER]: Could not retrieve source file, value not set."),
             terminal_feed: TerminalFeed {
                 std_cout: vec![],
-                std_cin: vec![TerminalStream::StandardInput(self.standard_input.unwrap_or(format!("")))],
-                std_err: vec![]
+                std_cin: vec![TerminalStream::new(TerminalStreamType::StandardInput, self.standard_input.unwrap_or(format!("")))],
+                std_err: vec![],
+                output: vec![]
             },
             timings: Timing {
                 time_sent: None,
@@ -134,7 +152,7 @@ impl ExecutorBuilder {
                 time_completed: None
             },
             sender_id,
-            allocated_dir: format!("{}/{}", sender_id.to_string(), id.to_string()),
+            allocated_dir: format!("jobs/{}/{}", sender_id.to_string(), id.to_string()),
             commandline_arguments: Arguments::parse(self.arguments.unwrap_or(format!("")))
         }
     }

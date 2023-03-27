@@ -1,22 +1,16 @@
-use crate::exec::Executor;
+use crate::exec::{Executor, TerminalStreamType};
 use std::process::{Command, Stdio, ExitStatus};
 use crate::exec::TerminalStream;
 use std::io::BufReader;
 use crate::lang::RuntimeError;
 use tokio::sync::MutexGuard;
 use std::thread;
-use std::io::{Read, Write, BufRead};
+use std::io::{Write, BufRead};
 
 pub fn run(exec: MutexGuard<Executor>) -> Result<ExitStatus, RuntimeError> {
     // Create File and Fill
-    let file_dir = format!("jobs/{}", exec.allocated_dir);
+    let file_dir = format!("{}", exec.allocated_dir);
     let file_contents: String = exec.src_file.clone();
-
-    // Template create all the directories necessary
-    match std::fs::create_dir_all(&file_dir) {
-        Ok(_) => {},
-        Err(err) => return Err(RuntimeError::WriteFailed(err.to_string())),
-    }
 
     match std::fs::write(&format!("{}/{}.py", file_dir, exec.id), file_contents) {
         Ok(_) => {},
@@ -36,8 +30,8 @@ pub fn run(exec: MutexGuard<Executor>) -> Result<ExitStatus, RuntimeError> {
         .unwrap();
 
     let input_vec = exec.terminal_feed.std_cin.iter().map(| v | {
-        match v {
-            TerminalStream::StandardInput(v) => v.as_str(),
+        match v.terminal_type {
+            TerminalStreamType::StandardInput => v.value.as_str(),
             _ => ""
         }
     }).collect::<Vec<&str>>().join("\n");
@@ -63,7 +57,7 @@ pub fn run(exec: MutexGuard<Executor>) -> Result<ExitStatus, RuntimeError> {
             let line = line.unwrap();
             println!("[OKA:OUTPUT]: {}", line);
 
-            match sender.send(TerminalStream::StandardOutput(line)) {
+            match sender.send(TerminalStream::new(TerminalStreamType::StandardOutput, line)) {
                 Ok(val) => println!("[TERM]: Sent output size {}", val),
                 Err(err) => println!("[TERM]: Failed to send output {:?}", err),
             }
@@ -76,7 +70,7 @@ pub fn run(exec: MutexGuard<Executor>) -> Result<ExitStatus, RuntimeError> {
             let line = line.unwrap();
             println!("[ERR:OUTPUT]: {}", line);
 
-            match sender2.send(TerminalStream::StandardError(line)) {
+            match sender2.send(TerminalStream::new(TerminalStreamType::StandardError, line)) {
                 Ok(val) => println!("[TERM]: Sent output size {}", val),
                 Err(err) => println!("[TERM]: Failed to send output {:?}", err),
             }

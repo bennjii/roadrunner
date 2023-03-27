@@ -33,7 +33,13 @@ async fn client_connection(ws: WebSocket, config: Locked<GlobalState>) {
 
     while let Some(result) = client_ws_rcv.next().await {
         let msg = match result {
-            Ok(msg) => msg,
+            Ok(msg) => {
+                if !msg.is_close() {
+                    msg
+                }else {
+                    continue;
+                }
+            },
             Err(e) => {
                 println!("[err]: Receiving message for id {}: {:?}", id, e);
                 continue;
@@ -41,6 +47,11 @@ async fn client_connection(ws: WebSocket, config: Locked<GlobalState>) {
         };
 
         client_msg(client.clone(), msg, &config).await;
+    }
+
+    match std::fs::remove_dir_all(format!("jobs/{}", id)) {
+        Ok(_) => println!("[POOL]: Cleaned Directory for user-leave"),
+        Err(_) => {}
     }
 
     config.lock().await

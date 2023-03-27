@@ -1,10 +1,9 @@
 use crate::runner::{Locked, GlobalState};
 use futures_timer::Delay;
-use tokio::join;
 use tokio::sync::mpsc::UnboundedSender;
 use std::time::Duration;
-use crate::exec::{Executor, TerminalStream, TerminalFeed};
-use crate::lang::Languages;
+use crate::exec::{Executor, TerminalStream, TerminalFeed, TerminalStreamType};
+use crate::lang::{Languages, RuntimeError};
 use warp::ws::Message;
 
 #[derive(Copy, Clone)]
@@ -59,6 +58,13 @@ impl Pool {
         let mut tx2 = locked_task.lock().await.broadcast.0.clone().subscribe();
         println!("[EXEC]: Performing task from sender");
 
+        let file_dir = locked_task.lock().await.allocated_dir.clone();
+        // Template create all the directories necessary
+        match std::fs::create_dir_all(&file_dir) {
+            Ok(_) => {},
+            Err(err) => println!("[POOL]: Failed to create directory, {}", err.to_string()),
+        }
+
         let sender_id = locked_task.lock().await.sender_id.clone();
         drop(sender_id);
 
@@ -70,12 +76,12 @@ impl Pool {
             let opt = match Languages::run(unlkd) {
                 Ok(val) => {
                     println!("[PROG:{}]: Completed Execution.", name);
-                    bcst.send(TerminalStream::EndOfOutput).unwrap();
+                    bcst.send(TerminalStream::new(TerminalStreamType::EndOfOutput, val.to_string())).unwrap();
                     Ok(val)
                 }
                 Err(err) => {
                     println!("[PROG:{}]: Runtime Error {:?}", name, err);
-                    bcst.send(TerminalStream::EndOfOutput).unwrap();
+                    bcst.send(TerminalStream::new(TerminalStreamType::EndOfOutput, err.clone().to_string())).unwrap();
                     Err(err)
                 }
             };
@@ -88,7 +94,8 @@ impl Pool {
         let mut feed = TerminalFeed {
             std_cout: vec![],
             std_cin: vec![],
-            std_err: vec![]
+            std_err: vec![],
+            output: vec![]
         };
 
         loop {
@@ -100,17 +107,20 @@ impl Pool {
                     sender.send(Message::text(as_string)).unwrap();
 
                     // Push into logs
-                    match terminal_stream {
-                        TerminalStream::StandardOutput(val) => {
-                            feed.std_cout.push(TerminalStream::StandardOutput(val));
+                    match terminal_stream.terminal_type {
+                        TerminalStreamType::StandardOutput => {
+                            feed.std_cout.push(terminal_stream);
                         },
-                        TerminalStream::StandardError(val) => {
-                            feed.std_err.push(TerminalStream::StandardError(val));
+                        TerminalStreamType::StandardError => {
+                            feed.std_err.push(terminal_stream);
                         },
-                        TerminalStream::StandardInput(val) => {
-                            feed.std_cin.push(TerminalStream::StandardInput(val));
+                        TerminalStreamType::StandardInput => {
+                            feed.std_cin.push(terminal_stream);
                         },
-                        TerminalStream::EndOfOutput => break
+                        TerminalStreamType::EndOfOutput => {
+                            feed.output.push(terminal_stream);
+                            break;
+                        }
                     };
                 }
                 Err(_) => {
@@ -120,9 +130,10 @@ impl Pool {
             };
         }
 
-        println!("[EXEC]: Execution Complete.");
-
-        // let (_, result_feed) = join!(spwn, feed_handler);
+        match std::fs::remove_dir_all(file_dir) {
+            Ok(_) => println!("[POOL]: Cleaned Directory after execution"),
+            Err(_) => {}
+        }
 
         feed
     }
