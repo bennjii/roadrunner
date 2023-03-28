@@ -60,7 +60,7 @@ pub struct Runner {
 }
 
 impl Runner {
-    pub fn batch(mut self) -> Executor {
+    pub fn batch(self) -> Executor {
         let executor = ExecutorBuilder::new()
             .language(self.language)
             .input(self.standard_input)
@@ -70,7 +70,6 @@ impl Runner {
 
         executor
     }
-
 }
 
 #[derive(Serialize, Deserialize)]
@@ -115,11 +114,7 @@ impl RunnerBuilder {
     }
 
     pub fn language(mut self, language: &str) -> Self {
-        self.language = match language {
-            "python" => Some(Languages::Python),
-            _ => None
-        };
-
+        self.language = Some(Languages::from_string(language));
         self
     }
 

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc::{self}, Mutex};
 use warp::{Reply, ws::{WebSocket, Message}, Rejection};
 use futures::{StreamExt, SinkExt};
-use crate::runner::{GlobalState, Locked, Client, RunnerBuilder, ExecutePacket};
+use crate::{runner::{GlobalState, Locked, Client, RunnerBuilder, ExecutePacket}, lang::RuntimeError};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 type Result<T> = std::result::Result<T, Rejection>;
@@ -63,7 +63,15 @@ async fn client_msg(client: Client, msg: Message, config: &Locked<GlobalState>) 
     // Expect message to be of type -> Insert Runner
 
     let string = msg.to_str().unwrap();
-    let packet: ExecutePacket = serde_json::from_str(string).unwrap();
+    let packet: ExecutePacket = match serde_json::from_str(string) {
+        Ok(val) => val,
+        Err(err) => {
+            println!("[WS]: Error parsing input, {}", err.to_string());
+            client.sender.send(Message::text(serde_json::to_string(&RuntimeError::ParseInput(err.to_string())).unwrap())).unwrap();
+
+            return
+        }
+    };
 
     let runner = RunnerBuilder::new()
         .arguments(packet.commandline_arguments)

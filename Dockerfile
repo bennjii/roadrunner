@@ -20,10 +20,7 @@ COPY --from=cacher /app/target target
 RUN cargo build --release --bin roadrunner
 
 FROM rust:1.68
-
-RUN mkdir app
-# COPY --from=planner /run/secrets/cert.pem ./app/run/secrets/cert.pem
-# COPY --from=planner /run/secrets/key.pem ./app/run/secrets/key.pem
+RUN curl -fsSL https://bun.sh/install | bash
 
 COPY --from=builder /app/target/release/roadrunner ./
 
