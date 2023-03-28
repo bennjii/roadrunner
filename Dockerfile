@@ -31,4 +31,4 @@ EXPOSE 443
 
 # WORKDIR /app
 
-CMD ["./roadrunner"]
+CMD /bin/bash -c "source /root/.bashrc && ./roadrunner"

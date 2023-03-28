@@ -13,7 +13,6 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<Child, RuntimeError> {
         Err(err) => return Err(RuntimeError::WriteFailed(err.to_string())),
     }
 
-
     // Compile File
     let compiler = match Command::new("gcc")
         .current_dir(format!("{}", file_dir))

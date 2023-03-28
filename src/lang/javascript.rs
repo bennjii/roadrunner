@@ -16,17 +16,16 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<Child, RuntimeError> {
     let new_args = exec.commandline_arguments.arguments.clone();
 
     // Execute File
-    let execution = match Command::new("~/.bun/bin/bun")
+    let execution = match Command::new("bun")
         .current_dir(file_dir.clone())
         .args(["run", "app.js"])
-        // .args(new_args)
+        .args(new_args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn() {
             Ok(val) => val,
             Err(err) => {
-                panic!();
                 return Err(RuntimeError::InitializationFailure(format!("Command: 'bun app.js' in '{}': {}", file_dir, err.to_string())))
             }
         };
