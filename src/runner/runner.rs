@@ -67,6 +67,7 @@ impl Runner {
             .input(self.standard_input)
             .src_file(self.source)
             .arguments(self.commandline_arguments)
+            .nonce(self.nonce)
             .build(self.requestee);
 
         executor

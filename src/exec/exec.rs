@@ -146,6 +146,11 @@ impl ExecutorBuilder {
         self
     }
 
+    pub fn nonce(mut self, nonce: String) -> Self {
+        self.nonce = Some(nonce);
+        self
+    }
+
     pub fn build(self, sender_id: Uuid) -> Executor {
         let throughput = broadcast::channel::<TerminalStream>(100);
         let id = Uuid::new_v4();
