@@ -37,10 +37,16 @@ async fn main() {
         .or(echo_route)
         .with(warp::cors().allow_any_origin());
 
+    dotenv::dotenv().ok();
+    let certificate = dotenv::var("CERTIFICATE").unwrap();
+    let private_key = dotenv::var("PRIVATE_KEY").unwrap();
+
     warp::serve(routes)
         .tls()
-        .cert_path("/run/secrets/certificate")
-        .key_path("/run/secrets/private_key")
+        .cert(certificate)
+        .key(private_key)
+        // .cert_path("/run/secrets/certificate")
+        // .key_path("/run/secrets/private_key")
         .run(([0, 0, 0, 0], 443))
         .await;
 }

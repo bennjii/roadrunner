@@ -1,0 +1,6 @@
+# flyctl launch added from .gitignore
+target
+keys
+run
+**/*.pem
+fly.toml
