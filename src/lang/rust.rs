@@ -1,9 +1,11 @@
 use crate::exec::{Executor};
-use std::process::{Command, Stdio, Child};
+use std::{process::{Command, Stdio, Child}, time::Instant};
 use crate::lang::RuntimeError;
 use tokio::{sync::MutexGuard};
 
-pub fn run(exec: &MutexGuard<Executor>) -> Result<Child, RuntimeError> {
+use super::ChildWrapper;
+
+pub fn run(exec: &MutexGuard<Executor>) -> Result<ChildWrapper, RuntimeError> {
     // Create File and Fill
     let file_dir = format!("{}", exec.allocated_dir);
     let file_contents: String = exec.src_file.clone();
@@ -22,6 +24,7 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<Child, RuntimeError> {
     }
 
     let args = exec.commandline_arguments.arguments.clone();
+    let now = Instant::now();
 
     // Execute File
     let execution = Command::new("cargo run")
@@ -32,5 +35,10 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<Child, RuntimeError> {
         .spawn()
         .unwrap();
 
-    Ok(execution)
+    let duration = now.elapsed();
+
+    Ok(ChildWrapper {
+        child: execution,
+        duration
+    })
 }

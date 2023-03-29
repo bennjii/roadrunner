@@ -1,9 +1,11 @@
 use crate::exec::{Executor};
-use std::process::{Command, Stdio, Child};
+use std::{process::{Command, Stdio}, time::Instant};
 use crate::lang::RuntimeError;
 use tokio::sync::MutexGuard;
 
-pub fn run(exec: &MutexGuard<Executor>) -> Result<Child, RuntimeError> {
+use super::ChildWrapper;
+
+pub fn run(exec: &MutexGuard<Executor>) -> Result<ChildWrapper, RuntimeError> {
     // Create File and Fill
     let file_dir = format!("{}", exec.allocated_dir);
     let file_contents: String = exec.src_file.clone();
@@ -29,7 +31,8 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<Child, RuntimeError> {
     println!("Running gcc {} {}: {:?}", format!("-o exec"), format!("main.c"), err_output);
 
     let new_args = exec.commandline_arguments.arguments.clone();
-    
+    let now = Instant::now();
+
     // Execute File
     let execution = match Command::new("./exec.out")
         .current_dir(format!("{}", file_dir))
@@ -42,5 +45,7 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<Child, RuntimeError> {
             Err(err) => return Err(RuntimeError::InitializationFailure(format!("Command: './exec.out' in '{}': {}", file_dir, err.to_string()))),
         };
 
-    Ok(execution)
+    let duration = now.elapsed();
+
+    Ok(ChildWrapper { child: execution, duration })
 }

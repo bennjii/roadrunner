@@ -1,9 +1,10 @@
 use crate::runner::{Locked, GlobalState};
+use chrono::Utc;
 use futures_timer::Delay;
 use tokio::sync::mpsc::UnboundedSender;
 use std::time::Duration;
 use crate::exec::{Executor, TerminalStream, TerminalFeed, TerminalStreamType};
-use crate::lang::{Languages, RuntimeError};
+use crate::lang::{Languages};
 use warp::ws::Message;
 
 #[derive(Copy, Clone)]
@@ -44,7 +45,8 @@ impl Pool {
                         task.lock().await.terminal_feed = res;
                     }else {
                         // Sleep Queue
-                        Delay::new(Duration::from_millis(100)).await;
+                        Delay::new(Duration::from_millis(1000)).await;
+                        println!("{}: Completed wait.", Utc::now().to_rfc3339());
                     }
                 }).await {
                     Ok(_a) => {}
@@ -76,7 +78,7 @@ impl Pool {
             let opt = match Languages::run(unlkd) {
                 Ok(val) => {
                     println!("[PROG:{}]: Completed Execution.", name);
-                    bcst.send(TerminalStream::new(TerminalStreamType::EndOfOutput, val.to_string())).unwrap();
+                    bcst.send(TerminalStream::new_output(TerminalStreamType::EndOfOutput, val)).unwrap();
                     Ok(val)
                 }
                 Err(err) => {

@@ -1,6 +1,6 @@
 use tokio::sync::broadcast::{Sender, Receiver};
 use tokio::sync::broadcast;
-use crate::lang::Languages;
+use crate::lang::{Languages, ExecutionOutput};
 use chrono::offset::Utc;
 use chrono::{DateTime};
 use uuid::Uuid;
@@ -31,10 +31,11 @@ pub enum TerminalStreamType {
     EndOfOutput
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Debug)]
 pub struct TerminalStream {
     pub terminal_type: TerminalStreamType,
-    pub value: String,
+    pub value: Option<ExecutionOutput>,
+    pub sval: Option<String>,
     pub timestamp: DateTime<Utc>
 }
 
@@ -42,7 +43,17 @@ impl TerminalStream {
     pub fn new(terminal_type: TerminalStreamType, value: String) -> Self {
         TerminalStream { 
             terminal_type: terminal_type, 
-            value: value, 
+            value: None,
+            sval: Some(value), 
+            timestamp: Utc::now()
+        }
+    }
+
+    pub fn new_output(terminal_type: TerminalStreamType, value: ExecutionOutput) -> Self {
+        TerminalStream { 
+            terminal_type: terminal_type, 
+            value: Some(value),
+            sval: None, 
             timestamp: Utc::now()
         }
     }
@@ -71,8 +82,7 @@ pub struct TerminalFeed {
 
 #[derive(Clone, Copy)]
 pub struct Timing {
-    pub time_sent: Option<DateTime<Utc>>,
-    pub time_recieved: Option<DateTime<Utc>>,
+    pub time_received: Option<DateTime<Utc>>,
     pub time_executed: Option<DateTime<Utc>>,
     pub time_completed: Option<DateTime<Utc>>
 }
@@ -146,8 +156,7 @@ impl ExecutorBuilder {
                 output: vec![]
             },
             timings: Timing {
-                time_sent: None,
-                time_recieved: None,
+                time_received: None,
                 time_executed: None,
                 time_completed: None
             },
