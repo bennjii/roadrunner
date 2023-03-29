@@ -43,6 +43,8 @@ async fn main() {
     let private_key = dotenv::var("PRIVATE_KEY").unwrap();
     let port: u16 = from_str::<u16>(&dotenv::var("PORT").unwrap()).unwrap();
 
+    println!("Deploying on 0.0.0.0:{}", port);
+
     warp::serve(routes)
         .tls()
         .cert(certificate)
