@@ -46,9 +46,9 @@ async fn main() {
     println!("Deploying on 0.0.0.0:{}", port);
 
     warp::serve(routes)
-        .tls()
-        .cert(certificate)
-        .key(private_key)
+        // .tls()
+        // .cert(certificate)
+        // .key(private_key)
         // .cert_path("/run/secrets/certificate")
         // .key_path("/run/secrets/private_key")
         .run(([0, 0, 0, 0], port))
