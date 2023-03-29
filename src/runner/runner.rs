@@ -118,6 +118,11 @@ impl RunnerBuilder {
         self
     }
 
+    pub fn nonce(mut self, nonce: String) -> Self {
+        self.nonce = Some(nonce);
+        self
+    }
+
     pub fn language(mut self, language: &str) -> Self {
         self.language = Some(Languages::from_string(language));
         self

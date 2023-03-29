@@ -62,7 +62,7 @@ async fn client_connection(ws: WebSocket, config: Locked<GlobalState>) {
 async fn client_msg(client: Client, msg: Message, config: &Locked<GlobalState>) {
     // Expect message to be of type -> Insert Runner
     let string = msg.to_str().unwrap();
-    
+
     let packet: ExecutePacket = match serde_json::from_str(string) {
         Ok(val) => val,
         Err(err) => {
@@ -78,6 +78,7 @@ async fn client_msg(client: Client, msg: Message, config: &Locked<GlobalState>) 
         .input(packet.standard_input)
         .language(&packet.language)
         .source(packet.source)
+        .nonce(packet.nonce)
         .build(client.id);
 
     let executor = runner.batch();
