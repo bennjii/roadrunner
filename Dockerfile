@@ -25,6 +25,6 @@ RUN curl -fsSL https://bun.sh/install | bash
 COPY --from=builder /app/target/release/roadrunner ./
 
 # ports and volumes
-EXPOSE 1-65535
+EXPOSE 443
 
 CMD /bin/bash -c "source /root/.bashrc && ./roadrunner"

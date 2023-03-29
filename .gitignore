@@ -2,3 +2,4 @@
 /keys
 /run
 *.pem
+.env

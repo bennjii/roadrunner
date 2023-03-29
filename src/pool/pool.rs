@@ -73,17 +73,18 @@ impl Pool {
         tokio::spawn(async move {
             let unlkd = locked_task.lock().await;
             let bcst = unlkd.broadcast.0.clone();
+            let nonce = unlkd.nonce.clone();
             let name = unlkd.id.clone();
 
             let opt = match Languages::run(unlkd) {
                 Ok(val) => {
                     println!("[PROG:{}]: Completed Execution.", name);
-                    bcst.send(TerminalStream::new_output(TerminalStreamType::EndOfOutput, val)).unwrap();
+                    bcst.send(TerminalStream::new_output(TerminalStreamType::EndOfOutput, val, nonce)).unwrap();
                     Ok(val)
                 }
                 Err(err) => {
                     println!("[PROG:{}]: Runtime Error {:?}", name, err);
-                    bcst.send(TerminalStream::new(TerminalStreamType::EndOfOutput, err.clone().to_string())).unwrap();
+                    bcst.send(TerminalStream::new(TerminalStreamType::EndOfOutput, err.clone().to_string(), nonce)).unwrap();
                     Err(err)
                 }
             };

@@ -48,7 +48,8 @@ impl GlobalState {
 #[derive(Clone)]
 pub struct Runner {
     pub id: Uuid,
-
+    pub nonce: String,
+    
     pub source: String,
     pub language: Languages,
 
@@ -77,6 +78,8 @@ pub struct ExecutePacket {
     pub source: String,
     pub language: String,
 
+    pub nonce: String,
+
     pub commandline_arguments: Option<String>,
     pub standard_input: Option<String>,
 }
@@ -84,6 +87,7 @@ pub struct ExecutePacket {
 #[derive(Serialize, Deserialize)]
 pub struct RunnerBuilder {
     pub id: Uuid,
+    pub nonce: Option<String>,
 
     pub source: Option<String>,
     pub language: Option<Languages>,
@@ -98,7 +102,8 @@ pub struct RunnerBuilder {
 impl RunnerBuilder {
     pub fn new() -> Self {
         RunnerBuilder { 
-            id: Uuid::new_v4(), 
+            id: Uuid::new_v4(),
+            nonce: None, 
             source: None, 
             language: None, 
             commandline_arguments: None, 
@@ -131,6 +136,7 @@ impl RunnerBuilder {
     pub fn build(self, requestee: Uuid) -> Runner {
         Runner {
             id: self.id,
+            nonce: self.nonce.unwrap_or(format!("")),
 
             source: self.source.expect("[RUNNER-BUILD]: Expected value \"source\" to be non-null"),
             language: self.language.expect("[RUNNER-BUILD]: Expected value \"language\" to be non-null"),

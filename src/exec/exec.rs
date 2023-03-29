@@ -36,24 +36,27 @@ pub struct TerminalStream {
     pub terminal_type: TerminalStreamType,
     pub value: Option<ExecutionOutput>,
     pub sval: Option<String>,
+    pub nonce: Option<String>,
     pub timestamp: DateTime<Utc>
 }
 
 impl TerminalStream {
-    pub fn new(terminal_type: TerminalStreamType, value: String) -> Self {
+    pub fn new(terminal_type: TerminalStreamType, value: String, nonce: Option<String>) -> Self {
         TerminalStream { 
             terminal_type: terminal_type, 
             value: None,
             sval: Some(value), 
+            nonce: nonce,
             timestamp: Utc::now()
         }
     }
 
-    pub fn new_output(terminal_type: TerminalStreamType, value: ExecutionOutput) -> Self {
+    pub fn new_output(terminal_type: TerminalStreamType, value: ExecutionOutput, nonce: Option<String>) -> Self {
         TerminalStream { 
             terminal_type: terminal_type, 
             value: Some(value),
             sval: None, 
+            nonce: nonce,
             timestamp: Utc::now()
         }
     }
@@ -92,10 +95,12 @@ pub struct ExecutorBuilder {
     standard_input: Option<String>, // STDIN
     arguments: Option<String>, // Command-line Arguments
     src_file: Option<String>, // Sourcefile
+    nonce: Option<String>
 }
 
 pub struct Executor {
     pub id: Uuid,
+    pub nonce: Option<String>,
 
     pub language: Languages,
     pub src_file: String,
@@ -116,7 +121,8 @@ impl ExecutorBuilder {
             language: None,
             standard_input: None,
             arguments: None,
-            src_file: None
+            src_file: None,
+            nonce: None
         }
     }
 
@@ -146,12 +152,13 @@ impl ExecutorBuilder {
 
         Executor {
             id: id,
+            nonce: self.nonce.clone(),
             broadcast: throughput,
             language: self.language.expect("[BUILDER]: Could not retrieve language, value not set."),
             src_file: self.src_file.expect("[BUILDER]: Could not retrieve source file, value not set."),
             terminal_feed: TerminalFeed {
                 std_cout: vec![],
-                std_cin: vec![TerminalStream::new(TerminalStreamType::StandardInput, self.standard_input.unwrap_or(format!("")))],
+                std_cin: vec![TerminalStream::new(TerminalStreamType::StandardInput, self.standard_input.unwrap_or(format!("")), self.nonce)],
                 std_err: vec![],
                 output: vec![]
             },

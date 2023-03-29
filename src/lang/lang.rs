@@ -118,6 +118,9 @@ impl Languages {
             
                 let sender = exec.broadcast.0.clone();
                 let sender2 = exec.broadcast.0.clone();
+                
+                let nonce = exec.nonce.clone();
+                let nonce_copy = exec.nonce.clone();
             
                 let stdout_thread = thread::spawn(move || {
                     let stdout_lines = BufReader::new(child_stdout).lines();
@@ -125,7 +128,7 @@ impl Languages {
                         let line = line.unwrap();
                         println!("[OKA:OUTPUT]: {}", line);
             
-                        match sender.send(TerminalStream::new(TerminalStreamType::StandardOutput, line)) {
+                        match sender.send(TerminalStream::new(TerminalStreamType::StandardOutput, line, nonce.clone())) {
                             Ok(val) => println!("[TERM]: Sent output size {}", val),
                             Err(err) => println!("[TERM]: Failed to send output {:?}", err),
                         }
@@ -138,7 +141,7 @@ impl Languages {
                         let line = line.unwrap();
                         println!("[ERR:OUTPUT]: {}", line);
             
-                        match sender2.send(TerminalStream::new(TerminalStreamType::StandardError, line)) {
+                        match sender2.send(TerminalStream::new(TerminalStreamType::StandardError, line, nonce_copy.clone())) {
                             Ok(val) => println!("[TERM]: Sent output size {}", val),
                             Err(err) => println!("[TERM]: Failed to send output {:?}", err),
                         }
