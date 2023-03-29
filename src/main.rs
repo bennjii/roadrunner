@@ -7,6 +7,7 @@ mod pool;
 pub use chrono;
 use pool::Pool;
 use runner::{GlobalState, Locked};
+use serde_json::from_str;
 
 use std::{sync::Arc, convert::Infallible};
 use tokio::sync::{Mutex};
@@ -40,6 +41,7 @@ async fn main() {
     dotenv::dotenv().ok();
     let certificate = dotenv::var("CERTIFICATE").unwrap();
     let private_key = dotenv::var("PRIVATE_KEY").unwrap();
+    let port: u16 = from_str::<u16>(&dotenv::var("PORT").unwrap()).unwrap();
 
     warp::serve(routes)
         .tls()
@@ -47,7 +49,7 @@ async fn main() {
         .key(private_key)
         // .cert_path("/run/secrets/certificate")
         // .key_path("/run/secrets/private_key")
-        .run(([0, 0, 0, 0], 443))
+        .run(([0, 0, 0, 0], port))
         .await;
 }
 
