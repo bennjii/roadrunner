@@ -1,10 +1,10 @@
-pub use lang::*;
+pub use language::*;
 
-mod lang;
+mod language;
 
 mod c;
-mod go;
 mod cpp;
-mod rust;
-mod python;
+mod go;
 mod javascript;
+mod python;
+mod rust;

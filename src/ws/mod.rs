@@ -1,5 +1,5 @@
 pub use echo::*;
-pub use ws::*;
+pub use websocket::*;
 
-mod ws;
 mod echo;
+mod websocket;
