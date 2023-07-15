@@ -74,12 +74,12 @@ jobs:
         with:
           context: .
           load: true
-          tags: ${{ env.TEST_TAG }}
+          tags: ${{ steps.meta.outputs.tags }}
 
       -
         name: Test w/ GO
         run: |
-          docker run --rm -d ${{ env.TEST_TAG }}
+          docker run --rm -d ${{ steps.meta.outputs.tags }}
           cd ./tests && go test -v ./...
 
       # Push Docker image if not failing
