@@ -138,43 +138,7 @@ impl Languages {
                     .collect::<Vec<&str>>()
                     .join("\n");
 
-                let stdout_thread = tokio::spawn(async move {
-                    let mut stdout_lines = BufReader::new(child_stdout).lines();
-                    loop {
-                        if let Some(line) = stdout_lines.next_line().await.unwrap() {
-                            println!("[OKAY_OUTPUT]: {}", line);
-
-                            match stdout_sender.send(TerminalStream::new(
-                                TerminalStreamType::StandardOutput,
-                                line,
-                                stdout_nonce.clone(),
-                            )) {
-                                Ok(val) => println!("[TERM]: Sent output size {}", val),
-                                Err(err) => println!("[TERM]: Failed to send output {:?}", err),
-                            }
-                        }
-                    }
-                });
-
-                let stderr_thread = tokio::spawn(async move {
-                    let mut stderr_lines = BufReader::new(child_stderr).lines();
-                    loop {
-                        if let Some(line) = stderr_lines.next_line().await.unwrap() {
-                            println!("[ERROR_OUTPUT]: {}", line);
-
-                            match stderr_sender.send(TerminalStream::new(
-                                TerminalStreamType::StandardError,
-                                line,
-                                stderr_nonce.clone(),
-                            )) {
-                                Ok(val) => println!("[TERM]: Sent output size {}", val),
-                                Err(err) => println!("[TERM]: Failed to send output {:?}", err),
-                            }
-                        }
-                    }
-                });
-
-                let stdin_tread = tokio::spawn(async move {
+                let stdin_thread = tokio::spawn(async move {
                     match child_stdin.write(input_vec.as_bytes()).await {
                         Ok(_) => {
                             println!("Wrote all values.")
@@ -192,13 +156,73 @@ impl Languages {
                     }
                 });
 
-                let standard_timeout = Duration::from_secs(2);
+                let stdout_thread = tokio::spawn(async move {
+                    let mut reader = BufReader::new(child_stdout);
+                    let mut buffer = vec![];
+
+                    loop {
+                        match reader.read_until(b'\n', &mut buffer).await {
+                            Ok(line_size) => {
+                                if line_size > 0 {
+                                    match stdout_sender.send(TerminalStream::new(
+                                        TerminalStreamType::StandardOutput,
+                                        String::from_utf8(buffer.clone()).unwrap(),
+                                        stdout_nonce.clone(),
+                                    )) {
+                                        Ok(val) => {
+                                            println!("[TERM]: Sent output size {}", val);
+                                            buffer.clear()
+                                        }
+                                        Err(err) => {
+                                            println!("[TERM]: Failed to send output {:?}", err)
+                                        }
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                eprintln!("Error reading output: {}", err);
+                            }
+                        }
+                    }
+                });
+
+                let stderr_thread = tokio::spawn(async move {
+                    let mut reader = BufReader::new(child_stderr);
+                    let mut buffer = vec![];
+
+                    loop {
+                        match reader.read_until(b'\n', &mut buffer).await {
+                            Ok(line_size) => {
+                                if line_size > 0 {
+                                    match stderr_sender.send(TerminalStream::new(
+                                        TerminalStreamType::StandardError,
+                                        String::from_utf8(buffer.clone()).unwrap(),
+                                        stderr_nonce.clone(),
+                                    )) {
+                                        Ok(val) => {
+                                            println!("[TERM]: Sent output size {}", val);
+                                            buffer.clear()
+                                        }
+                                        Err(err) => {
+                                            println!("[TERM]: Failed to send output {:?}", err)
+                                        }
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                eprintln!("Error reading output: {}", err);
+                            }
+                        }
+                    }
+                });
+
+                let standard_timeout = Duration::from_secs(5);
 
                 loop {
                     match execution.child.try_wait() {
                         Ok(optional) => match optional {
                             Some(exit_status) => {
-                                stdin_tread.abort();
+                                stdin_thread.abort();
                                 stdout_thread.abort();
                                 stderr_thread.abort();
 
@@ -215,7 +239,7 @@ impl Languages {
                             }
                         },
                         Err(err) => {
-                            stdin_tread.abort();
+                            stdin_thread.abort();
                             stdout_thread.abort();
                             stderr_thread.abort();
                             return Err(RuntimeError::Capture(err.to_string()));
