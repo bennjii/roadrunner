@@ -4,6 +4,7 @@ use crate::lang::Languages;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+use tokio::runtime::Runtime;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 use warp::ws::Message;
@@ -33,6 +34,7 @@ pub struct GlobalState {
     pub task_queue: Locked<VecDeque<Locked<Executor>>>,
     pub runners: Locked<HashMap<String, Runner>>,
     pub clients: Locked<HashMap<String, Client>>,
+    pub runtime: Locked<Runtime>,
 }
 
 impl GlobalState {
@@ -41,6 +43,7 @@ impl GlobalState {
             task_queue: Arc::new(Mutex::new(VecDeque::new())),
             runners: Arc::new(Mutex::new(HashMap::new())),
             clients: Arc::new(Mutex::new(HashMap::new())),
+            runtime: Arc::new(Mutex::new(Runtime::new().unwrap())),
         }
     }
 }
