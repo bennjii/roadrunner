@@ -108,46 +108,51 @@ impl Pool {
             }
         });
 
-        // We can listen to the stream of inputs/outputs
-        // let feed_handler = tokio::spawn(async move {
-        let mut feed = TerminalFeed {
-            std_cout: vec![],
-            std_cin: vec![],
-            std_err: vec![],
-            output: vec![],
-        };
-
-        loop {
-            match tx2.recv().await {
-                Ok(terminal_stream) => {
-                    // Send to websocket listener
-                    let as_string = serde_json::to_string(&terminal_stream).unwrap();
-                    println!("[STREAM]: Sending value, '{}' to ws", as_string);
-                    sender.send(Message::text(as_string)).unwrap();
-
-                    // Push into logs
-                    match terminal_stream.terminal_type {
-                        TerminalStreamType::StandardOutput => {
-                            feed.std_cout.push(terminal_stream);
-                        }
-                        TerminalStreamType::StandardError => {
-                            feed.std_err.push(terminal_stream);
-                        }
-                        TerminalStreamType::StandardInput => {
-                            feed.std_cin.push(terminal_stream);
-                        }
-                        TerminalStreamType::EndOfOutput => {
-                            feed.output.push(terminal_stream);
-                            break;
-                        }
-                    };
-                }
-                Err(_) => {
-                    println!("[TERM]: Poor receive.");
-                    // No new input
-                }
+        let feed = tokio::spawn(async move {
+            // We can listen to the stream of inputs/outputs
+            let mut feed = TerminalFeed {
+                std_cout: vec![],
+                std_cin: vec![],
+                std_err: vec![],
+                output: vec![],
             };
-        }
+
+            loop {
+                match tx2.recv().await {
+                    Ok(terminal_stream) => {
+                        // Send to websocket listener
+                        let as_string = serde_json::to_string(&terminal_stream).unwrap();
+                        println!("[STREAM]: Sending value, '{}' to ws", as_string);
+                        sender.send(Message::text(as_string)).unwrap();
+
+                        // Push into logs
+                        match terminal_stream.terminal_type {
+                            TerminalStreamType::StandardOutput => {
+                                feed.std_cout.push(terminal_stream);
+                            }
+                            TerminalStreamType::StandardError => {
+                                feed.std_err.push(terminal_stream);
+                            }
+                            TerminalStreamType::StandardInput => {
+                                feed.std_cin.push(terminal_stream);
+                            }
+                            TerminalStreamType::EndOfOutput => {
+                                feed.output.push(terminal_stream);
+                                break;
+                            }
+                        };
+                    }
+                    Err(_) => {
+                        println!("[TERM]: Poor receive.");
+                        // No new input
+                    }
+                };
+            }
+
+            feed
+        })
+        .await
+        .unwrap();
 
         if std::fs::remove_dir_all(file_dir).is_ok() {
             println!("[POOL]: Cleaned Directory after execution")
