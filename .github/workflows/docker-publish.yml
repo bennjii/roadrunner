@@ -24,7 +24,7 @@ jobs:
   build:
     strategy:
       fail-fast: true
-    runs-on: buildjet-4vcpu-ubuntu-2204-arm
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
