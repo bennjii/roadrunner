@@ -1,5 +1,8 @@
 /target
 /keys
 /run
+/jobs
+/**/jobs
+**/jobs/*
 *.pem
 .env

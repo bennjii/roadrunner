@@ -42,7 +42,12 @@ async fn client_connection(ws: WebSocket, config: Locked<GlobalState>) {
 
     tokio::spawn(async move {
         while let Some(value) = client_rcv.next().await {
-            client_ws_sender.send(value).await.unwrap();
+            match client_ws_sender.send(value).await {
+                Ok(_) => {}
+                Err(error) => {
+                    println!("[WS]: Unable to send message {}", error)
+                }
+            }
         }
     });
 
