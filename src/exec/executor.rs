@@ -35,22 +35,24 @@ pub enum TerminalStreamType {
 pub struct TerminalStream {
     pub terminal_type: TerminalStreamType,
     pub value: Option<ExecutionOutput>,
-    pub sval: Option<String>,
+    pub pipe_value: Option<String>,
     pub nonce: Option<String>,
     pub timestamp: DateTime<Utc>,
 }
 
 impl TerminalStream {
+    /// Stream pipe feed (`stdin`, `stdout`, `stderr`)
     pub fn new(terminal_type: TerminalStreamType, value: String, nonce: Option<String>) -> Self {
         TerminalStream {
             terminal_type,
             value: None,
-            sval: Some(value),
+            pipe_value: Some(value),
             nonce,
             timestamp: Utc::now(),
         }
     }
 
+    /// Stream pipe ending w/ `exit_status` and `duration`
     pub fn new_output(
         terminal_type: TerminalStreamType,
         value: ExecutionOutput,
@@ -59,7 +61,7 @@ impl TerminalStream {
         TerminalStream {
             terminal_type,
             value: Some(value),
-            sval: None,
+            pipe_value: None,
             nonce,
             timestamp: Utc::now(),
         }

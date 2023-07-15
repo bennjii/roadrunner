@@ -2,7 +2,6 @@ use crate::exec::{Executor, TerminalFeed, TerminalStream, TerminalStreamType};
 use crate::lang::Languages;
 use crate::runner::{GlobalState, Locked};
 
-use chrono::Utc;
 use futures_timer::Delay;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
@@ -52,7 +51,6 @@ impl Pool {
                     } else {
                         // Sleep Queue
                         Delay::new(Duration::from_millis(1000)).await;
-                        println!("{}: Completed wait.", Utc::now().to_rfc3339());
                     }
                 })
                 .await
