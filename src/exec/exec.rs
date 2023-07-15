@@ -1,24 +1,24 @@
-use tokio::sync::broadcast::{Sender, Receiver};
-use tokio::sync::broadcast;
-use crate::lang::{Languages, ExecutionOutput};
+use crate::lang::{ExecutionOutput, Languages};
 use chrono::offset::Utc;
-use chrono::{DateTime};
+use chrono::DateTime;
+use serde::{Deserialize, Serialize};
+use tokio::sync::broadcast;
+use tokio::sync::broadcast::{Receiver, Sender};
 use uuid::Uuid;
-use serde::{Serialize, Deserialize};
 
 #[derive(Clone)]
 pub struct Arguments {
     pub argument_count: i32,
-    pub arguments: Vec<String>
+    pub arguments: Vec<String>,
 }
 
 impl Arguments {
     pub fn parse(argument_string: String) -> Self {
-        let arguments: Vec<String> = argument_string.split(" ").into_iter().map(|e| format!("{}", e)).collect();
+        let arguments: Vec<String> = argument_string.split(' ').map(|e| e.to_string()).collect();
 
         Arguments {
             argument_count: arguments.len().try_into().unwrap(),
-            arguments
+            arguments,
         }
     }
 }
@@ -28,7 +28,7 @@ pub enum TerminalStreamType {
     StandardInput,
     StandardOutput,
     StandardError,
-    EndOfOutput
+    EndOfOutput,
 }
 
 #[derive(Clone, Serialize, Debug)]
@@ -37,65 +37,56 @@ pub struct TerminalStream {
     pub value: Option<ExecutionOutput>,
     pub sval: Option<String>,
     pub nonce: Option<String>,
-    pub timestamp: DateTime<Utc>
+    pub timestamp: DateTime<Utc>,
 }
 
 impl TerminalStream {
     pub fn new(terminal_type: TerminalStreamType, value: String, nonce: Option<String>) -> Self {
-        TerminalStream { 
-            terminal_type: terminal_type, 
+        TerminalStream {
+            terminal_type,
             value: None,
-            sval: Some(value), 
-            nonce: nonce,
-            timestamp: Utc::now()
+            sval: Some(value),
+            nonce,
+            timestamp: Utc::now(),
         }
     }
 
-    pub fn new_output(terminal_type: TerminalStreamType, value: ExecutionOutput, nonce: Option<String>) -> Self {
-        TerminalStream { 
-            terminal_type: terminal_type, 
+    pub fn new_output(
+        terminal_type: TerminalStreamType,
+        value: ExecutionOutput,
+        nonce: Option<String>,
+    ) -> Self {
+        TerminalStream {
+            terminal_type,
             value: Some(value),
-            sval: None, 
-            nonce: nonce,
-            timestamp: Utc::now()
+            sval: None,
+            nonce,
+            timestamp: Utc::now(),
         }
     }
 }
-
-//impl Serialize for TerminalStream {
-//    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//    where
-//        S: Serializer,
-//    {
-//        match *self {
-//            TerminalStream::StandardInput(x) => serializer.serialize_str(&x),
-//            TerminalStream::StandardOutput(x) => serializer.serialize_str(&x),
-//            TerminalStream::StandardError(x) => serializer.serialize_str(&x),
-//        }
-//    }
-//}
 
 #[derive(Clone, Debug)]
 pub struct TerminalFeed {
     pub std_cout: Vec<TerminalStream>,
     pub std_cin: Vec<TerminalStream>,
     pub std_err: Vec<TerminalStream>,
-    pub output: Vec<TerminalStream>
+    pub output: Vec<TerminalStream>,
 }
 
 #[derive(Clone, Copy)]
 pub struct Timing {
     pub time_received: Option<DateTime<Utc>>,
     pub time_executed: Option<DateTime<Utc>>,
-    pub time_completed: Option<DateTime<Utc>>
+    pub time_completed: Option<DateTime<Utc>>,
 }
 
 pub struct ExecutorBuilder {
-    language: Option<Languages>, // Language
+    language: Option<Languages>,    // Language
     standard_input: Option<String>, // STDIN
-    arguments: Option<String>, // Command-line Arguments
-    src_file: Option<String>, // Sourcefile
-    nonce: Option<String>
+    arguments: Option<String>,      // Command-line Arguments
+    src_file: Option<String>,       // Sourcefile
+    nonce: Option<String>,
 }
 
 pub struct Executor {
@@ -112,7 +103,7 @@ pub struct Executor {
     pub timings: Timing,
     pub broadcast: (Sender<TerminalStream>, Receiver<TerminalStream>),
 
-    pub sender_id: Uuid
+    pub sender_id: Uuid,
 }
 
 impl ExecutorBuilder {
@@ -122,7 +113,7 @@ impl ExecutorBuilder {
             standard_input: None,
             arguments: None,
             src_file: None,
-            nonce: None
+            nonce: None,
         }
     }
 
@@ -156,25 +147,33 @@ impl ExecutorBuilder {
         let id = Uuid::new_v4();
 
         Executor {
-            id: id,
+            id,
             nonce: self.nonce.clone(),
             broadcast: throughput,
-            language: self.language.expect("[BUILDER]: Could not retrieve language, value not set."),
-            src_file: self.src_file.expect("[BUILDER]: Could not retrieve source file, value not set."),
+            language: self
+                .language
+                .expect("[BUILDER]: Could not retrieve language, value not set."),
+            src_file: self
+                .src_file
+                .expect("[BUILDER]: Could not retrieve source file, value not set."),
             terminal_feed: TerminalFeed {
                 std_cout: vec![],
-                std_cin: vec![TerminalStream::new(TerminalStreamType::StandardInput, self.standard_input.unwrap_or(format!("")), self.nonce)],
+                std_cin: vec![TerminalStream::new(
+                    TerminalStreamType::StandardInput,
+                    self.standard_input.unwrap_or(String::new()),
+                    self.nonce,
+                )],
                 std_err: vec![],
-                output: vec![]
+                output: vec![],
             },
             timings: Timing {
                 time_received: None,
                 time_executed: None,
-                time_completed: None
+                time_completed: None,
             },
             sender_id,
-            allocated_dir: format!("jobs/{}/{}", sender_id.to_string(), id.to_string()),
-            commandline_arguments: Arguments::parse(self.arguments.unwrap_or(format!("")))
+            allocated_dir: format!("jobs/{}/{}", sender_id, id),
+            commandline_arguments: Arguments::parse(self.arguments.unwrap_or(String::new())),
         }
     }
 }

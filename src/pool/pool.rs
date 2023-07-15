@@ -1,20 +1,18 @@
-use crate::runner::{Locked, GlobalState};
+use crate::exec::{Executor, TerminalFeed, TerminalStream, TerminalStreamType};
+use crate::lang::Languages;
+use crate::runner::{GlobalState, Locked};
 use chrono::Utc;
 use futures_timer::Delay;
-use tokio::sync::mpsc::UnboundedSender;
 use std::time::Duration;
-use crate::exec::{Executor, TerminalStream, TerminalFeed, TerminalStreamType};
-use crate::lang::{Languages};
+use tokio::sync::mpsc::UnboundedSender;
 use warp::ws::Message;
 
 #[derive(Copy, Clone)]
-pub struct Pool {
-
-}
+pub struct Pool {}
 
 impl Pool {
     pub fn new() -> Self {
-        Pool {  }
+        Pool {}
     }
 
     pub async fn begin(self, config: Locked<GlobalState>) {
@@ -31,65 +29,82 @@ impl Pool {
                         println!("[POOL]: Found task to perform");
 
                         drop(task_queue);
-                        
-                        let sid = task.lock().await.sender_id.clone();
+
+                        let sid = task.lock().await.sender_id;
                         let sender = config_lock
-                            .clients.lock().await
-                            .get(&sid.to_string()).unwrap()
-                            .sender.clone();
+                            .clients
+                            .lock()
+                            .await
+                            .get(&sid.to_string())
+                            .unwrap()
+                            .sender
+                            .clone();
 
                         println!("[POOL]: Got sender, starting!");
 
                         let res = self.execute(task.clone(), sender).await;
                         println!("[POOL]: Ended with output, {:?}", res);
                         task.lock().await.terminal_feed = res;
-                    }else {
+                    } else {
                         // Sleep Queue
                         Delay::new(Duration::from_millis(1000)).await;
                         println!("{}: Completed wait.", Utc::now().to_rfc3339());
                     }
-                }).await {
+                })
+                .await
+                {
                     Ok(_a) => {}
                     Err(_e) => {}
                 }
             }
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
     }
 
-    pub async fn execute(&self, locked_task: Locked<Executor>, sender: UnboundedSender<Message>) -> TerminalFeed {
+    pub async fn execute(
+        &self,
+        locked_task: Locked<Executor>,
+        sender: UnboundedSender<Message>,
+    ) -> TerminalFeed {
         let mut tx2 = locked_task.lock().await.broadcast.0.clone().subscribe();
         println!("[EXEC]: Performing task from sender");
 
         let file_dir = locked_task.lock().await.allocated_dir.clone();
         // Template create all the directories necessary
         match std::fs::create_dir_all(&file_dir) {
-            Ok(_) => {},
-            Err(err) => println!("[POOL]: Failed to create directory, {}", err.to_string()),
+            Ok(_) => {}
+            Err(err) => println!("[POOL]: Failed to create directory, {}", err),
         }
-
-        let sender_id = locked_task.lock().await.sender_id.clone();
-        drop(sender_id);
 
         tokio::spawn(async move {
             let unlkd = locked_task.lock().await;
             let bcst = unlkd.broadcast.0.clone();
             let nonce = unlkd.nonce.clone();
-            let name = unlkd.id.clone();
+            let name = unlkd.id;
 
-            let opt = match Languages::run(unlkd) {
+            match Languages::run(unlkd) {
                 Ok(val) => {
                     println!("[PROG:{}]: Completed Execution.", name);
-                    bcst.send(TerminalStream::new_output(TerminalStreamType::EndOfOutput, val, nonce)).unwrap();
+                    bcst.send(TerminalStream::new_output(
+                        TerminalStreamType::EndOfOutput,
+                        val,
+                        nonce,
+                    ))
+                    .unwrap();
                     Ok(val)
                 }
                 Err(err) => {
                     println!("[PROG:{}]: Runtime Error {:?}", name, err);
-                    bcst.send(TerminalStream::new(TerminalStreamType::EndOfOutput, err.clone().to_string(), nonce)).unwrap();
+                    bcst.send(TerminalStream::new(
+                        TerminalStreamType::EndOfOutput,
+                        err.clone().to_string(),
+                        nonce,
+                    ))
+                    .unwrap();
                     Err(err)
                 }
-            };
-
-            opt
+            }
         });
 
         // We can listen to the stream of inputs/outputs
@@ -98,7 +113,7 @@ impl Pool {
             std_cout: vec![],
             std_cin: vec![],
             std_err: vec![],
-            output: vec![]
+            output: vec![],
         };
 
         loop {
@@ -113,13 +128,13 @@ impl Pool {
                     match terminal_stream.terminal_type {
                         TerminalStreamType::StandardOutput => {
                             feed.std_cout.push(terminal_stream);
-                        },
+                        }
                         TerminalStreamType::StandardError => {
                             feed.std_err.push(terminal_stream);
-                        },
+                        }
                         TerminalStreamType::StandardInput => {
                             feed.std_cin.push(terminal_stream);
-                        },
+                        }
                         TerminalStreamType::EndOfOutput => {
                             feed.output.push(terminal_stream);
                             break;
@@ -133,9 +148,8 @@ impl Pool {
             };
         }
 
-        match std::fs::remove_dir_all(file_dir) {
-            Ok(_) => println!("[POOL]: Cleaned Directory after execution"),
-            Err(_) => {}
+        if std::fs::remove_dir_all(file_dir).is_ok() {
+            println!("[POOL]: Cleaned Directory after execution")
         }
 
         feed

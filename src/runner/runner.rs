@@ -1,12 +1,12 @@
-use crate::lang::Languages;
 use crate::exec::Executor;
 use crate::exec::ExecutorBuilder;
-use std::collections::{VecDeque, HashMap};
-use serde::{Serialize, Deserialize};
-use tokio::sync::Mutex;
+use crate::lang::Languages;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use warp::ws::Message;
+use tokio::sync::Mutex;
 use uuid::Uuid;
+use warp::ws::Message;
 
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -16,7 +16,7 @@ pub type Locked<T> = Arc<Mutex<T>>;
 pub struct Client {
     pub id: Uuid,
     pub job_history: Vec<Runner>,
-    pub sender: UnboundedSender<Message>
+    pub sender: UnboundedSender<Message>,
 }
 
 impl Client {
@@ -24,7 +24,7 @@ impl Client {
         Client {
             id: Uuid::new_v4(),
             job_history: vec![],
-            sender: sender
+            sender,
         }
     }
 }
@@ -32,7 +32,7 @@ impl Client {
 pub struct GlobalState {
     pub task_queue: Locked<VecDeque<Locked<Executor>>>,
     pub runners: Locked<HashMap<String, Runner>>,
-    pub clients: Locked<HashMap<String, Client>>
+    pub clients: Locked<HashMap<String, Client>>,
 }
 
 impl GlobalState {
@@ -40,7 +40,7 @@ impl GlobalState {
         GlobalState {
             task_queue: Arc::new(Mutex::new(VecDeque::new())),
             runners: Arc::new(Mutex::new(HashMap::new())),
-            clients: Arc::new(Mutex::new(HashMap::new()))
+            clients: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -49,7 +49,7 @@ impl GlobalState {
 pub struct Runner {
     pub id: Uuid,
     pub nonce: String,
-    
+
     pub source: String,
     pub language: Languages,
 
@@ -62,15 +62,13 @@ pub struct Runner {
 
 impl Runner {
     pub fn batch(self) -> Executor {
-        let executor = ExecutorBuilder::new()
+        ExecutorBuilder::new()
             .language(self.language)
             .input(self.standard_input)
             .src_file(self.source)
             .arguments(self.commandline_arguments)
             .nonce(self.nonce)
-            .build(self.requestee);
-
-        executor
+            .build(self.requestee)
     }
 }
 
@@ -102,15 +100,15 @@ pub struct RunnerBuilder {
 
 impl RunnerBuilder {
     pub fn new() -> Self {
-        RunnerBuilder { 
+        RunnerBuilder {
             id: Uuid::new_v4(),
-            nonce: None, 
-            source: None, 
-            language: None, 
-            commandline_arguments: None, 
-            standard_input: None, 
-            requestee: None, 
-            executor: None 
+            nonce: None,
+            source: None,
+            language: None,
+            commandline_arguments: None,
+            standard_input: None,
+            requestee: None,
+            executor: None,
         }
     }
 
@@ -142,16 +140,20 @@ impl RunnerBuilder {
     pub fn build(self, requestee: Uuid) -> Runner {
         Runner {
             id: self.id,
-            nonce: self.nonce.unwrap_or(format!("")),
+            nonce: self.nonce.unwrap_or(String::new()),
 
-            source: self.source.expect("[RUNNER-BUILD]: Expected value \"source\" to be non-null"),
-            language: self.language.expect("[RUNNER-BUILD]: Expected value \"language\" to be non-null"),
+            source: self
+                .source
+                .expect("[RUNNER-BUILD]: Expected value \"source\" to be non-null"),
+            language: self
+                .language
+                .expect("[RUNNER-BUILD]: Expected value \"language\" to be non-null"),
 
-            commandline_arguments: self.commandline_arguments.unwrap_or(format!("")),
-            standard_input: self.standard_input.unwrap_or(format!("")),
+            commandline_arguments: self.commandline_arguments.unwrap_or(String::new()),
+            standard_input: self.standard_input.unwrap_or(String::new()),
 
             requestee,
-            executor: None,  // Has not been assigned an executor yet!
+            executor: None, // Has not been assigned an executor yet!
         }
     }
 }

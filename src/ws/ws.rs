@@ -1,10 +1,19 @@
 use std::sync::Arc;
 
-use tokio::sync::{mpsc::{self}, Mutex};
-use warp::{Reply, ws::{WebSocket, Message}, Rejection};
-use futures::{StreamExt, SinkExt};
-use crate::{runner::{GlobalState, Locked, Client, RunnerBuilder, ExecutePacket}, lang::RuntimeError};
+use crate::{
+    lang::RuntimeError,
+    runner::{Client, ExecutePacket, GlobalState, Locked, RunnerBuilder},
+};
+use futures::{SinkExt, StreamExt};
+use tokio::sync::{
+    mpsc::{self},
+    Mutex,
+};
 use tokio_stream::wrappers::UnboundedReceiverStream;
+use warp::{
+    ws::{Message, WebSocket},
+    Rejection, Reply,
+};
 
 type Result<T> = std::result::Result<T, Rejection>;
 
@@ -17,13 +26,19 @@ async fn client_connection(ws: WebSocket, config: Locked<GlobalState>) {
     let (client_sender, client_rcv) = mpsc::unbounded_channel();
 
     let mut client_rcv = UnboundedReceiverStream::new(client_rcv);
-    // Now that we have a client connection, we can listen 
+    // Now that we have a client connection, we can listen
     // for requests and push to the pool of jobs.
 
     let client = Client::new(client_sender);
     let id = &client.id.to_string();
 
-    config.lock().await.clients.lock().await.insert(id.to_string(), client.clone());
+    config
+        .lock()
+        .await
+        .clients
+        .lock()
+        .await
+        .insert(id.to_string(), client.clone());
 
     tokio::spawn(async move {
         while let Some(value) = client_rcv.next().await {
@@ -36,10 +51,10 @@ async fn client_connection(ws: WebSocket, config: Locked<GlobalState>) {
             Ok(msg) => {
                 if !msg.is_close() {
                     msg
-                }else {
+                } else {
                     continue;
                 }
-            },
+            }
             Err(e) => {
                 println!("[err]: Receiving message for id {}: {:?}", id, e);
                 continue;
@@ -49,14 +64,11 @@ async fn client_connection(ws: WebSocket, config: Locked<GlobalState>) {
         client_msg(client.clone(), msg, &config).await;
     }
 
-    match std::fs::remove_dir_all(format!("jobs/{}", id)) {
-        Ok(_) => println!("[POOL]: Cleaned Directory for user-leave"),
-        Err(_) => {}
+    if std::fs::remove_dir_all(format!("jobs/{}", id)).is_ok() {
+        println!("[POOL]: Cleaned Directory for user-leave")
     }
 
-    config.lock().await
-        .clients.lock().await
-        .remove(id);
+    config.lock().await.clients.lock().await.remove(id);
 }
 
 async fn client_msg(client: Client, msg: Message, config: &Locked<GlobalState>) {
@@ -66,10 +78,15 @@ async fn client_msg(client: Client, msg: Message, config: &Locked<GlobalState>) 
     let packet: ExecutePacket = match serde_json::from_str(string) {
         Ok(val) => val,
         Err(err) => {
-            println!("[WS]: Error parsing input, {}", err.to_string());
-            client.sender.send(Message::text(serde_json::to_string(&RuntimeError::ParseInput(err.to_string())).unwrap())).unwrap();
+            println!("[WS]: Error parsing input, {}", err);
+            client
+                .sender
+                .send(Message::text(
+                    serde_json::to_string(&RuntimeError::ParseInput(err.to_string())).unwrap(),
+                ))
+                .unwrap();
 
-            return
+            return;
         }
     };
 
@@ -82,5 +99,11 @@ async fn client_msg(client: Client, msg: Message, config: &Locked<GlobalState>) 
         .build(client.id);
 
     let executor = runner.batch();
-    config.lock().await.task_queue.lock().await.push_back(Arc::new(Mutex::new(executor)));
+    config
+        .lock()
+        .await
+        .task_queue
+        .lock()
+        .await
+        .push_back(Arc::new(Mutex::new(executor)));
 }

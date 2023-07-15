@@ -1,20 +1,26 @@
-use std::{process::{ExitStatus, Child}, io::{Write, BufReader, BufRead}, thread, time::Duration};
+use std::{
+    io::{BufRead, BufReader, Write},
+    process::{Child, ExitStatus},
+    thread,
+    time::Duration,
+};
 
-use crate::exec::{Executor, TerminalStreamType, TerminalStream};
-use phf::{Map, phf_map};
-use serde::{Serialize, Deserialize, Serializer, ser::SerializeStruct};
+use crate::exec::{Executor, TerminalStream, TerminalStreamType};
 use crate::lang;
+use phf::{phf_map, Map};
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use tokio::sync::MutexGuard;
+use wait_timeout::ChildExt;
 
 pub struct ChildWrapper {
     pub child: Child,
-    pub duration: Duration
+    pub duration: Duration,
 }
 
 #[derive(Clone, Debug, Copy)]
 pub struct ExecutionOutput {
     pub exit_status: ExitStatus,
-    pub duration: Duration
+    pub duration: Duration,
 }
 
 impl Serialize for ExecutionOutput {
@@ -43,7 +49,11 @@ static LANGUAGES: Map<&'static str, LanguageExecutor> = phf_map! {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
 pub enum RuntimeError {
-    NoExecutor, Capture(String), WriteFailed(String), InitializationFailure(String), ParseInput(String)
+    NoExecutor,
+    Capture(String),
+    WriteFailed(String),
+    InitializationFailure(String),
+    ParseInput(String),
 }
 
 impl RuntimeError {
@@ -60,7 +70,7 @@ pub enum Languages {
     Rust,
     Go,
     C,
-    Cpp
+    Cpp,
 }
 
 impl Languages {
@@ -71,19 +81,19 @@ impl Languages {
             Self::Rust => "rust",
             Self::Go => "go",
             Self::C => "c",
-            Self::Cpp => "cpp"
+            Self::Cpp => "cpp",
         }
     }
 
     pub fn from_string(language: &str) -> Languages {
         match language {
-            "python" => Self::Python, 
+            "python" => Self::Python,
             "javascript" => Self::Javascript,
             "rust" => Self::Rust,
             "go" => Self::Go,
             "c" => Self::C,
             "cpp" => Self::Cpp,
-            _ => Self::Python
+            _ => Self::Python,
         }
     }
 
@@ -94,17 +104,21 @@ impl Languages {
                     Ok(val) => val,
                     Err(err) => return Err(err),
                 };
-                
-                let input_vec = exec.terminal_feed.std_cin.iter().map(| v | {
-                    match v.terminal_type {
+
+                let input_vec = exec
+                    .terminal_feed
+                    .std_cin
+                    .iter()
+                    .map(|v| match v.terminal_type {
                         TerminalStreamType::StandardInput => v.sval.as_ref().unwrap().as_str(),
-                        _ => ""
-                    }
-                }).collect::<Vec<&str>>().join("\n");
-            
+                        _ => "",
+                    })
+                    .collect::<Vec<&str>>()
+                    .join("\n");
+
                 let mut input = execution.child.stdin.take().unwrap();
                 input.write_all(input_vec.as_bytes()).unwrap();
-            
+
                 let child_stdout = execution
                     .child
                     .stdout
@@ -115,52 +129,74 @@ impl Languages {
                     .stderr
                     .take()
                     .expect("Internal error, could not take stderr");
-            
+
                 let sender = exec.broadcast.0.clone();
                 let sender2 = exec.broadcast.0.clone();
-                
+
                 let nonce = exec.nonce.clone();
                 let nonce_copy = exec.nonce.clone();
-            
+
                 let stdout_thread = thread::spawn(move || {
                     let stdout_lines = BufReader::new(child_stdout).lines();
                     for line in stdout_lines {
                         let line = line.unwrap();
                         println!("[OKA:OUTPUT]: {}", line);
-            
-                        match sender.send(TerminalStream::new(TerminalStreamType::StandardOutput, line, nonce.clone())) {
+
+                        match sender.send(TerminalStream::new(
+                            TerminalStreamType::StandardOutput,
+                            line,
+                            nonce.clone(),
+                        )) {
                             Ok(val) => println!("[TERM]: Sent output size {}", val),
                             Err(err) => println!("[TERM]: Failed to send output {:?}", err),
                         }
                     }
                 });
-            
+
                 let stderr_thread = thread::spawn(move || {
                     let stderr_lines = BufReader::new(child_stderr).lines();
                     for line in stderr_lines {
                         let line = line.unwrap();
                         println!("[ERR:OUTPUT]: {}", line);
-            
-                        match sender2.send(TerminalStream::new(TerminalStreamType::StandardError, line, nonce_copy.clone())) {
+
+                        match sender2.send(TerminalStream::new(
+                            TerminalStreamType::StandardError,
+                            line,
+                            nonce_copy.clone(),
+                        )) {
                             Ok(val) => println!("[TERM]: Sent output size {}", val),
                             Err(err) => println!("[TERM]: Failed to send output {:?}", err),
                         }
                     }
                 });
-            
-                let status = execution
+
+                let standard_timeout = Duration::from_secs(2);
+
+                let try_exit = execution
                     .child
-                    .wait()
+                    .wait_timeout(standard_timeout)
                     .expect("Internal error, failed to wait on child");
-            
+
                 stdout_thread.join().unwrap();
                 stderr_thread.join().unwrap();
-            
-                Ok(ExecutionOutput { exit_status: status, duration: execution.duration })
+
+                match try_exit {
+                    Some(status) => Ok(ExecutionOutput {
+                        exit_status: status,
+                        duration: execution.duration,
+                    }),
+                    None => {
+                        execution.child.kill().unwrap();
+                        let status = execution.child.wait().unwrap();
+
+                        Ok(ExecutionOutput {
+                            exit_status: status,
+                            duration: execution.duration,
+                        })
+                    }
+                }
             }
-            None => {
-                Err(RuntimeError::NoExecutor)
-            }
+            None => Err(RuntimeError::NoExecutor),
         }
     }
 }
