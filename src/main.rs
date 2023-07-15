@@ -31,8 +31,8 @@ async fn main() {
         .with(warp::cors().allow_any_origin());
 
     dotenv::dotenv().ok();
-    let _certificate = dotenv::var("CERTIFICATE").unwrap();
-    let _private_key = dotenv::var("PRIVATE_KEY").unwrap();
+    // let _certificate = dotenv::var("CERTIFICATE").unwrap();
+    // let _private_key = dotenv::var("PRIVATE_KEY").unwrap();
     let port: u16 = from_str::<u16>(&dotenv::var("PORT").unwrap()).unwrap();
 
     println!("Deploying on 0.0.0.0:{}", port);

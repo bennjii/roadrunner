@@ -79,7 +79,7 @@ jobs:
       -
         name: Test w/ GO
         run: |
-          docker run --rm -d ${{ steps.meta.outputs.tags }}
+          docker run -d -p 443:443 ${{ steps.meta.outputs.tags }}
           cd ./tests && go test -v ./...
 
       # Push Docker image if not failing
@@ -89,6 +89,7 @@ jobs:
         uses: docker/build-push-action@ac9327eae2b366085ac7f6a2d02df8aa8ead720a
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -40,5 +40,6 @@ COPY --from=builder /app/target/release/roadrunner ./
 
 # ports and volumes
 EXPOSE 443
+ENV PORT=443
 
 CMD /bin/bash -c "source /root/.bashrc && ./roadrunner"
