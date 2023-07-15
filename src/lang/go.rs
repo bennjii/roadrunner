@@ -1,10 +1,8 @@
 use crate::exec::Executor;
 use crate::lang::RuntimeError;
-use std::{
-    io::{BufWriter, Write},
-    process::{Command, Stdio},
-    time::Instant,
-};
+use std::process::Command as LinearCommand;
+use std::{process::Stdio, time::Instant};
+use tokio::process::Command;
 use tokio::sync::MutexGuard;
 
 use super::ChildWrapper;
@@ -14,13 +12,21 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<ChildWrapper, RuntimeError> {
     let file_dir = exec.allocated_dir.to_string();
     let file_contents: String = exec.src_file.clone();
 
-    Command::new("go")
+    match LinearCommand::new("go")
         .current_dir(&file_dir)
         .args(["mod", "init", "roadrunner.com/task"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .unwrap();
+    {
+        Ok(mut val) => val.wait().unwrap(),
+        Err(err) => {
+            return Err(RuntimeError::InitializationFailure(format!(
+                "Command: 'go mod init roadrunner.com/task' in '{}': {}",
+                file_dir, err
+            )))
+        }
+    };
 
     match std::fs::write(format!("{}/task.go", file_dir), file_contents) {
         Ok(_) => {}
@@ -28,7 +34,7 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<ChildWrapper, RuntimeError> {
     }
 
     // Compile File
-    let compiler = match Command::new("go")
+    let compiler = match LinearCommand::new("go")
         .current_dir(&file_dir)
         .args(["build"])
         .stdin(Stdio::piped())
@@ -68,18 +74,6 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<ChildWrapper, RuntimeError> {
             )))
         }
     };
-
-    let mut outstdin = execution.stdin.as_ref().unwrap();
-    let mut writer = BufWriter::new(&mut outstdin);
-
-    // Write all lines of input
-    for line in &exec.terminal_feed.std_cin {
-        if let Some(reference) = line.sval.as_ref() {
-            writer.write_all(reference.as_bytes()).unwrap();
-        }
-    }
-
-    drop(writer);
 
     Ok(ChildWrapper {
         child: execution,

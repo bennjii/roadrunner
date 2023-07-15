@@ -1,11 +1,7 @@
 use crate::exec::Executor;
 use crate::lang::RuntimeError;
-use std::{
-    io::{BufWriter, Write},
-    process::{Command, Stdio},
-    time::Instant,
-};
-use tokio::sync::MutexGuard;
+use std::{process::Stdio, time::Instant};
+use tokio::{process::Command, sync::MutexGuard};
 
 use super::ChildWrapper;
 
@@ -49,18 +45,6 @@ def print(*args, **kwargs):
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-
-    let mut outstdin = execution.stdin.as_ref().unwrap();
-    let mut writer = BufWriter::new(&mut outstdin);
-
-    // Write all lines of input
-    for line in &exec.terminal_feed.std_cin {
-        if let Some(reference) = line.sval.as_ref() {
-            writer.write_all(reference.as_bytes()).unwrap();
-        }
-    }
-
-    drop(writer);
 
     Ok(ChildWrapper {
         child: execution,

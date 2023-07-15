@@ -1,10 +1,10 @@
 use crate::lang::RuntimeError;
 use crate::{exec::Executor, lang::ChildWrapper};
-use std::io::{BufWriter, Write};
 use std::{
-    process::{Command, Stdio},
+    process::{Command as LinearCommand, Stdio},
     time::Instant,
 };
+use tokio::process::Command;
 use tokio::sync::MutexGuard;
 
 pub fn run(exec: &MutexGuard<Executor>) -> Result<ChildWrapper, RuntimeError> {
@@ -18,7 +18,7 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<ChildWrapper, RuntimeError> {
     }
 
     // Compile File
-    let compiler = match Command::new("g++")
+    let compiler = match LinearCommand::new("g++")
         .current_dir(&file_dir)
         .args(["-o", "exec.out", "main.cpp"])
         .stdin(Stdio::piped())
@@ -58,18 +58,6 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<ChildWrapper, RuntimeError> {
             )))
         }
     };
-
-    let mut outstdin = execution.stdin.as_ref().unwrap();
-    let mut writer = BufWriter::new(&mut outstdin);
-
-    // Write all lines of input
-    for line in &exec.terminal_feed.std_cin {
-        if let Some(reference) = line.sval.as_ref() {
-            writer.write_all(reference.as_bytes()).unwrap();
-        }
-    }
-
-    drop(writer);
 
     Ok(ChildWrapper {
         child: execution,

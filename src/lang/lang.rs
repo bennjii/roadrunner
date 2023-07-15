@@ -1,16 +1,13 @@
-use std::{
-    io::{BufRead, BufReader, Write},
-    process::{Child, ExitStatus},
-    thread,
-    time::{Duration, Instant},
-};
+use std::process::ExitStatus;
+use std::time::{Duration, Instant};
 
 use crate::exec::{Executor, TerminalStream, TerminalStreamType};
 use crate::lang;
 use phf::{phf_map, Map};
 use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::process::Child;
 use tokio::sync::MutexGuard;
-use wait_timeout::ChildExt;
 
 pub struct ChildWrapper {
     pub child: Child,
@@ -57,8 +54,8 @@ pub enum RuntimeError {
 }
 
 impl RuntimeError {
-    pub fn to_string(self) -> String {
-        serde_json::to_string(&self).unwrap()
+    pub fn as_string(&self) -> String {
+        serde_json::to_string(self).unwrap()
     }
 }
 
@@ -74,7 +71,7 @@ pub enum Languages {
 }
 
 impl Languages {
-    pub fn to_string(&self) -> &str {
+    pub fn as_string(&self) -> &str {
         match self {
             Self::Python => "python",
             Self::Javascript => "javascript",
@@ -97,27 +94,13 @@ impl Languages {
         }
     }
 
-    pub fn run(exec: MutexGuard<Executor>) -> Result<ExecutionOutput, RuntimeError> {
-        match LANGUAGES.get(Self::to_string(&exec.language)) {
+    pub async fn run(exec: MutexGuard<'_, Executor>) -> Result<ExecutionOutput, RuntimeError> {
+        match LANGUAGES.get(Self::as_string(&exec.language)) {
             Some(executor) => {
                 let mut execution: ChildWrapper = match executor(&exec) {
                     Ok(val) => val,
                     Err(err) => return Err(err),
                 };
-
-                let input_vec = exec
-                    .terminal_feed
-                    .std_cin
-                    .iter()
-                    .map(|v| match v.terminal_type {
-                        TerminalStreamType::StandardInput => v.sval.as_ref().unwrap().as_str(),
-                        _ => "",
-                    })
-                    .collect::<Vec<&str>>()
-                    .join("\n");
-
-                let mut input = execution.child.stdin.take().unwrap();
-                input.write_all(input_vec.as_bytes()).unwrap();
 
                 let child_stdout = execution
                     .child
@@ -129,70 +112,114 @@ impl Languages {
                     .stderr
                     .take()
                     .expect("Internal error, could not take stderr");
+                let mut child_stdin = execution
+                    .child
+                    .stdin
+                    .take()
+                    .expect("Internal error, could not take stdin");
 
-                let sender = exec.broadcast.0.clone();
-                let sender2 = exec.broadcast.0.clone();
+                let stdout_sender = exec.broadcast.0.clone();
+                let stderr_sender = exec.broadcast.0.clone();
+                let stdin_sender = exec.broadcast.0.clone();
 
-                let nonce = exec.nonce.clone();
-                let nonce_copy = exec.nonce.clone();
+                let stdout_nonce = exec.nonce.clone();
+                let stderr_nonce = exec.nonce.clone();
+                let stdin_nonce = exec.nonce.clone();
 
-                let stdout_thread = thread::spawn(move || {
-                    let stdout_lines = BufReader::new(child_stdout).lines();
-                    for line in stdout_lines {
-                        let line = line.unwrap();
-                        println!("[OKA:OUTPUT]: {}", line);
+                // Collate STDIN inputs
+                let input_vec = exec
+                    .terminal_feed
+                    .std_cin
+                    .iter()
+                    .map(|v| match v.terminal_type {
+                        TerminalStreamType::StandardInput => v.sval.as_ref().unwrap().as_str(),
+                        _ => "",
+                    })
+                    .collect::<Vec<&str>>()
+                    .join("\n");
 
-                        match sender.send(TerminalStream::new(
-                            TerminalStreamType::StandardOutput,
-                            line,
-                            nonce.clone(),
-                        )) {
-                            Ok(val) => println!("[TERM]: Sent output size {}", val),
-                            Err(err) => println!("[TERM]: Failed to send output {:?}", err),
+                let stdout_thread = tokio::spawn(async move {
+                    let mut stdout_lines = BufReader::new(child_stdout).lines();
+                    loop {
+                        if let Some(line) = stdout_lines.next_line().await.unwrap() {
+                            println!("[OKAY_OUTPUT]: {}", line);
+
+                            match stdout_sender.send(TerminalStream::new(
+                                TerminalStreamType::StandardOutput,
+                                line,
+                                stdout_nonce.clone(),
+                            )) {
+                                Ok(val) => println!("[TERM]: Sent output size {}", val),
+                                Err(err) => println!("[TERM]: Failed to send output {:?}", err),
+                            }
                         }
                     }
                 });
 
-                let stderr_thread = thread::spawn(move || {
-                    let stderr_lines = BufReader::new(child_stderr).lines();
-                    for line in stderr_lines {
-                        let line = line.unwrap();
-                        println!("[ERR:OUTPUT]: {}", line);
+                let stderr_thread = tokio::spawn(async move {
+                    let mut stderr_lines = BufReader::new(child_stderr).lines();
+                    loop {
+                        if let Some(line) = stderr_lines.next_line().await.unwrap() {
+                            println!("[ERROR_OUTPUT]: {}", line);
 
-                        match sender2.send(TerminalStream::new(
-                            TerminalStreamType::StandardError,
-                            line,
-                            nonce_copy.clone(),
-                        )) {
-                            Ok(val) => println!("[TERM]: Sent output size {}", val),
-                            Err(err) => println!("[TERM]: Failed to send output {:?}", err),
+                            match stderr_sender.send(TerminalStream::new(
+                                TerminalStreamType::StandardError,
+                                line,
+                                stderr_nonce.clone(),
+                            )) {
+                                Ok(val) => println!("[TERM]: Sent output size {}", val),
+                                Err(err) => println!("[TERM]: Failed to send output {:?}", err),
+                            }
+                        }
+                    }
+                });
+
+                let stdin_tread = tokio::spawn(async move {
+                    match child_stdin.write(input_vec.as_bytes()).await {
+                        Ok(_) => {
+                            println!("Wrote all values.")
+                        }
+                        Err(error) => {
+                            match stdin_sender.send(TerminalStream::new(
+                                TerminalStreamType::StandardError,
+                                format!("roadrunner_error: {}", error),
+                                stdin_nonce.clone(),
+                            )) {
+                                Ok(val) => println!("[TERM]: Sent output size {}", val),
+                                Err(err) => println!("[TERM]: Failed to send output {:?}", err),
+                            }
                         }
                     }
                 });
 
                 let standard_timeout = Duration::from_secs(2);
 
-                let try_exit = execution
-                    .child
-                    .wait_timeout(standard_timeout)
-                    .expect("Internal error, failed to wait on child");
+                loop {
+                    match execution.child.try_wait() {
+                        Ok(optional) => match optional {
+                            Some(exit_status) => {
+                                stdin_tread.abort();
+                                stdout_thread.abort();
+                                stderr_thread.abort();
 
-                stdout_thread.join().unwrap();
-                stderr_thread.join().unwrap();
-
-                match try_exit {
-                    Some(status) => Ok(ExecutionOutput {
-                        exit_status: status,
-                        duration: execution.start_time.elapsed(),
-                    }),
-                    None => {
-                        execution.child.kill().unwrap();
-                        let status = execution.child.wait().unwrap();
-
-                        Ok(ExecutionOutput {
-                            exit_status: status,
-                            duration: execution.start_time.elapsed(),
-                        })
+                                return Ok(ExecutionOutput {
+                                    exit_status,
+                                    duration: execution.start_time.elapsed(),
+                                });
+                            }
+                            None => {
+                                if execution.start_time.elapsed().ge(&standard_timeout) {
+                                    // Has run for too long, kill it.
+                                    let _ = execution.child.start_kill();
+                                }
+                            }
+                        },
+                        Err(err) => {
+                            stdin_tread.abort();
+                            stdout_thread.abort();
+                            stderr_thread.abort();
+                            return Err(RuntimeError::Capture(err.to_string()));
+                        }
                     }
                 }
             }
