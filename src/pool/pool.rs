@@ -4,6 +4,7 @@ use crate::runner::{GlobalState, Locked};
 use chrono::Utc;
 use futures_timer::Delay;
 use std::time::Duration;
+use tokio::runtime::Runtime;
 use tokio::sync::mpsc::UnboundedSender;
 use warp::ws::Message;
 
@@ -16,50 +17,44 @@ impl Pool {
     }
 
     pub async fn begin(self, config: Locked<GlobalState>) {
-        tokio::spawn(async move {
-            loop {
-                let conf_clone = config.clone();
+        let rt = Runtime::new().unwrap();
 
-                match tokio::spawn(async move {
-                    let config_lock = conf_clone.lock().await;
-                    let mut task_queue = config_lock.task_queue.lock().await;
+        loop {
+            let conf_clone = config.clone();
 
-                    if let Some(task) = task_queue.pop_front() {
-                        // Have some task to perform.
-                        println!("[POOL]: Found task to perform");
+            let config_lock = conf_clone.lock().await;
+            let mut task_queue = config_lock.task_queue.lock().await;
 
-                        drop(task_queue);
+            if let Some(task) = task_queue.pop_front() {
+                // Have some task to perform.
+                println!("[POOL]: Found task to perform");
+                drop(task_queue);
 
-                        let sid = task.lock().await.sender_id;
-                        let sender = config_lock
-                            .clients
-                            .lock()
-                            .await
-                            .get(&sid.to_string())
-                            .unwrap()
-                            .sender
-                            .clone();
+                let sid = task.lock().await.sender_id;
 
-                        println!("[POOL]: Got sender, starting!");
+                let sender = config_lock
+                    .clients
+                    .lock()
+                    .await
+                    .get(&sid.to_string())
+                    .unwrap()
+                    .sender
+                    .clone();
 
-                        let res = self.execute(task.clone(), sender).await;
-                        println!("[POOL]: Ended with output, {:?}", res);
-                        task.lock().await.terminal_feed = res;
-                    } else {
-                        // Sleep Queue
-                        Delay::new(Duration::from_millis(1000)).await;
-                        println!("{}: Completed wait.", Utc::now().to_rfc3339());
-                    }
-                })
-                .await
-                {
-                    Ok(_a) => {}
-                    Err(_e) => {}
-                }
+                println!("[POOL]: Got sender, starting!");
+                let task_copy = task.clone();
+
+                rt.spawn(async move {
+                    let value = self.execute(task_copy, sender).await;
+                    println!("[POOL]: Ended with output, {:?}", value);
+                    task.lock().await.terminal_feed = value;
+                });
+            } else {
+                // Sleep Queue
+                Delay::new(Duration::from_millis(1000)).await;
+                println!("{}: Completed wait.", Utc::now().to_rfc3339());
             }
-        })
-        .await
-        .unwrap();
+        }
     }
 
     pub async fn execute(
