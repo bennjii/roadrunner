@@ -2,7 +2,7 @@ use std::{
     io::{BufRead, BufReader, Write},
     process::{Child, ExitStatus},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::exec::{Executor, TerminalStream, TerminalStreamType};
@@ -14,7 +14,7 @@ use wait_timeout::ChildExt;
 
 pub struct ChildWrapper {
     pub child: Child,
-    pub duration: Duration,
+    pub start_time: Instant,
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -43,7 +43,7 @@ static LANGUAGES: Map<&'static str, LanguageExecutor> = phf_map! {
     "rust" => lang::rust::run,
     "c" => lang::c::run,
     "cpp" => lang::cpp::run,
-//    "go" => lang::go::run,
+   "go" => lang::go::run,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -183,7 +183,7 @@ impl Languages {
                 match try_exit {
                     Some(status) => Ok(ExecutionOutput {
                         exit_status: status,
-                        duration: execution.duration,
+                        duration: execution.start_time.elapsed(),
                     }),
                     None => {
                         execution.child.kill().unwrap();
@@ -191,7 +191,7 @@ impl Languages {
 
                         Ok(ExecutionOutput {
                             exit_status: status,
-                            duration: execution.duration,
+                            duration: execution.start_time.elapsed(),
                         })
                     }
                 }

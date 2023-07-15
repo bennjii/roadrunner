@@ -1,5 +1,6 @@
 use crate::lang::RuntimeError;
 use crate::{exec::Executor, lang::ChildWrapper};
+use std::io::{BufWriter, Write};
 use std::{
     process::{Command, Stdio},
     time::Instant,
@@ -29,21 +30,13 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<ChildWrapper, RuntimeError> {
         Err(err) => {
             return Err(RuntimeError::InitializationFailure(format!(
                 "Command: 'g++ {} {} ' in '{}': {}",
-                format!("-o exec.out"),
-                format!("main.cpp"),
-                file_dir,
-                err
+                "-o exec.out", "main.cpp", file_dir, err
             )))
         }
     };
 
     let err_output = String::from_utf8(compiler.wait_with_output().unwrap().stderr).unwrap();
-    println!(
-        "Running gcc {} {}: {:?}",
-        format!("-o exec"),
-        format!("main.cpp"),
-        err_output
-    );
+    println!("Running gcc -o exec main.cpp: {:?}", err_output);
 
     let new_args = exec.commandline_arguments.arguments.clone();
     let now = Instant::now();
@@ -66,10 +59,20 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<ChildWrapper, RuntimeError> {
         }
     };
 
-    let duration = now.elapsed();
+    let mut outstdin = execution.stdin.as_ref().unwrap();
+    let mut writer = BufWriter::new(&mut outstdin);
+
+    // Write all lines of input
+    for line in &exec.terminal_feed.std_cin {
+        if let Some(reference) = line.sval.as_ref() {
+            writer.write_all(reference.as_bytes()).unwrap();
+        }
+    }
+
+    drop(writer);
 
     Ok(ChildWrapper {
         child: execution,
-        duration,
+        start_time: now,
     })
 }
