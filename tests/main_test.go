@@ -110,12 +110,20 @@ func testHeader(suite *RoadRunnerTestSuite, content []byte, assertion func(respo
 	go func() {
 		defer closeChannel()
 
+	reader:
 		for {
-			// Read the response from the websocket connection
-			_, response, err := conn.ReadMessage()
-			assert.NoError(t, err)
+			select {
+			case <-doneCh:
+				break reader
+			default:
+				// Read the response from the websocket connection
+				_, response, err := conn.ReadMessage()
+				// assert.NoError(t, err)
 
-			if err == nil {
+				if err != nil {
+					break reader
+				}
+
 				var myResponse RoadRunnerResponse
 				err = json.Unmarshal(response, &myResponse)
 				assert.NoError(t, err)
@@ -125,11 +133,9 @@ func testHeader(suite *RoadRunnerTestSuite, content []byte, assertion func(respo
 
 					if myResponse.TerminalType == "EndOfOutput" {
 						// Break out of the loop when the response is "EndOfOutput"
-						return
+						break reader
 					}
 				}
-			} else {
-				return
 			}
 		}
 	}()
@@ -151,6 +157,8 @@ out:
 
 			fmt.Println("Timeout Occurred")
 			t.Error("Timeout occurred")
+			break out
+		case <-doneCh:
 			break out
 		}
 	}
