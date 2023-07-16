@@ -29,12 +29,12 @@ func (suite *RoadRunnerTestSuite) TestRustIO() {
 			assert.Equal(t, "exit status: 0", response.Value.ExitStatus)
 		}
 	}
-	testHeader(suite, `{
+	testHeader(suite, []byte(`{
 		"language": "rust",
 		"source": "use std::io;\nfn main() {\n\tfor line in io::stdin().lines() {\n\t\tprint!(\"{}\", line.unwrap());\n\t\tbreak;\n\t}\n}",
 		"nonce": "rust-io",
 		"standard_input": "A\nB"
-	}`, assertionFunction)
+	}`), assertionFunction)
 }
 
 func (suite *RoadRunnerTestSuite) TestRustIterative() {
@@ -51,11 +51,11 @@ func (suite *RoadRunnerTestSuite) TestRustIterative() {
 		}
 	}
 
-	testHeader(suite, `{
+	testHeader(suite, []byte(`{
 		"language": "rust",
 		"source": "use std::time::Duration;\nuse std::thread;\nfn main() {\n\tfor i in 0..5 {\n\t\tprintln!(\"{}\", i);\n\t\tthread::sleep(Duration::from_millis(500))\n\t}\n}",
 		"nonce": "rust-timed"
-	}`, assertionFunction)
+	}`), assertionFunction)
 }
 
 func (suite *RoadRunnerTestSuite) TestRustIterativeImmediate() {
@@ -72,9 +72,9 @@ func (suite *RoadRunnerTestSuite) TestRustIterativeImmediate() {
 		}
 	}
 
-	testHeader(suite, `{
+	testHeader(suite, []byte(`{
 		"language": "rust",
 		"source": "use std::thread;\nfn main() {\n\tfor i in 0..5 {\n\t\tprintln!(\"{}\", i);\n\t}\n}",
 		"nonce": "rust-iterative"
-	}`, assertionFunction)
+	}`), assertionFunction)
 }

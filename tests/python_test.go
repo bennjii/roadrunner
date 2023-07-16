@@ -17,12 +17,12 @@ func (suite *RoadRunnerTestSuite) TestPythonIO() {
 			assert.Equal(t, "exit status: 0", response.Value.ExitStatus)
 		}
 	}
-	testHeader(suite, `{
+	testHeader(suite, []byte(`{
 		"language": "python",
 		"source": "input_value = input()\ninput_value2 = input()\nprint(input_value + ' [or] ' + input_value2)",
 		"nonce": "python-io",
 		"standard_input": "hello world!!!\nThis is another"
-	}`, assertionFunction)
+	}`), assertionFunction)
 }
 
 func (suite *RoadRunnerTestSuite) TestPythonIterative() {
@@ -39,11 +39,11 @@ func (suite *RoadRunnerTestSuite) TestPythonIterative() {
 		}
 	}
 
-	testHeader(suite, `{
+	testHeader(suite, []byte(`{
 		"language": "python",
 		"source": "import time\nfor i in range(5):\n\tprint(i)\n\ttime.sleep(0.5)",
 		"nonce": "python-timed"
-	}`, assertionFunction)
+	}`), assertionFunction)
 }
 
 func (suite *RoadRunnerTestSuite) TestPythonIterativeImmediate() {
@@ -60,9 +60,9 @@ func (suite *RoadRunnerTestSuite) TestPythonIterativeImmediate() {
 		}
 	}
 
-	testHeader(suite, `{
+	testHeader(suite, []byte(`{
 		"language": "python",
 		"source": "import time\nfor i in range(5):\n\tprint(i)\n\ttime.sleep(0.5)",
 		"nonce": "python-iterative"
-	}`, assertionFunction)
+	}`), assertionFunction)
 }

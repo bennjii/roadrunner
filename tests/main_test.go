@@ -17,7 +17,6 @@ import (
 
 type RoadRunnerTestSuite struct {
 	suite.Suite
-	conn *websocket.Conn
 }
 
 type RoadRunnerTermination struct {
@@ -33,15 +32,19 @@ type RoadRunnerResponse struct {
 	Timestamp    string                `json:"timestamp"`
 }
 
+type RoadRunnerRequest struct {
+	Language             string `json:"language"`
+	Source               string `json:"source"`
+	Nonce                string `json:"nonce"`
+	StandardInput        string `json:"standard_input"`
+	CommandLineArguments string `json:"commandline_arguments"`
+}
+
 var done chan interface{}
 var interrupt chan os.Signal
 
-func (suite *RoadRunnerTestSuite) SetupTest() {
-	suite.T().Parallel()
-
-	done = make(chan interface{})    // Channel to indicate that the receiverHandler is done
-	interrupt = make(chan os.Signal) // Channel to listen for interrupt signal to terminate gracefully
-
+func instantiateWebsocketConnection() *websocket.Conn {
+	interrupt = make(chan os.Signal)       // Channel to listen for interrupt signal to terminate gracefully
 	signal.Notify(interrupt, os.Interrupt) // Notify the interrupt channel for SIGINT
 
 	socketUrl := "ws://localhost:443" + "/ws"
@@ -50,12 +53,10 @@ func (suite *RoadRunnerTestSuite) SetupTest() {
 		log.Fatal("Error connecting to Websocket Server:", err)
 	}
 
-	suite.Require().NoError(err)
-	suite.conn = conn
+	return conn
 }
 
-func (suite *RoadRunnerTestSuite) TearDownTest() {
-	conn := suite.conn
+func closeWebsocketConnection(conn *websocket.Conn) {
 	// Terminate gracefully...
 	log.Println("Received TESTEND interrupt signal. Closing all pending connections")
 
@@ -76,14 +77,18 @@ func (suite *RoadRunnerTestSuite) TearDownTest() {
 	}
 }
 
-func testHeader(suite *RoadRunnerTestSuite, content string, assertion func(response RoadRunnerResponse, t *testing.T)) {
+func testHeader(suite *RoadRunnerTestSuite, content []byte, assertion func(response RoadRunnerResponse, t *testing.T)) {
 	// Channel for receiving the response
 	responseCh := make(chan RoadRunnerResponse)
-
 	doneCh := make(chan struct{})
 
 	t := suite.T()
-	conn := suite.conn
+	conn := instantiateWebsocketConnection()
+	defer closeWebsocketConnection(conn)
+
+	var referenceNonce RoadRunnerRequest
+	var marshal_error = json.Unmarshal(content, &referenceNonce)
+	assert.NoError(t, marshal_error)
 
 	fmt.Println("Starting Message", content)
 
@@ -91,25 +96,39 @@ func testHeader(suite *RoadRunnerTestSuite, content string, assertion func(respo
 	var timedOut = time.After(6 * time.Second)
 
 	// Write the value to the websocket connection
-	err := conn.WriteMessage(websocket.TextMessage, []byte(content))
+	err := conn.WriteMessage(websocket.TextMessage, content)
 	assert.NoError(t, err)
 
+	var closeChannel = func() {
+		select {
+		case <-doneCh:
+		default:
+			close(doneCh)
+		}
+	}
+
 	go func() {
-		defer close(doneCh)
+		defer closeChannel()
 
 		for {
 			// Read the response from the websocket connection
 			_, response, err := conn.ReadMessage()
 			assert.NoError(t, err)
 
-			var myResponse RoadRunnerResponse
-			err = json.Unmarshal(response, &myResponse)
-			assert.NoError(t, err)
+			if err == nil {
+				var myResponse RoadRunnerResponse
+				err = json.Unmarshal(response, &myResponse)
+				assert.NoError(t, err)
 
-			responseCh <- myResponse
+				if myResponse.Nonce == referenceNonce.Nonce {
+					responseCh <- myResponse
 
-			if myResponse.TerminalType == "EndOfOutput" {
-				// Break out of the loop when the response is "EndOfOutput"
+					if myResponse.TerminalType == "EndOfOutput" {
+						// Break out of the loop when the response is "EndOfOutput"
+						return
+					}
+				}
+			} else {
 				return
 			}
 		}
@@ -128,7 +147,7 @@ out:
 				break out
 			}
 		case <-timedOut:
-			close(doneCh)
+			closeChannel()
 
 			fmt.Println("Timeout Occurred")
 			t.Error("Timeout occurred")
@@ -137,6 +156,10 @@ out:
 	}
 
 	<-doneCh
+}
+
+func (suite *RoadRunnerTestSuite) SetupTest() {
+	suite.T().Parallel()
 }
 
 func TestSuite(t *testing.T) {
