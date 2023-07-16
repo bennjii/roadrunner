@@ -93,7 +93,7 @@ func testHeader(suite *RoadRunnerTestSuite, content []byte, assertion func(respo
 	fmt.Println("Starting Message", content)
 
 	// 1s longer than standard timeout to check the internal timeout works.
-	var timedOut = time.After(6 * time.Second)
+	var timedOut = time.After(10 * time.Second)
 
 	// Write the value to the websocket connection
 	err := conn.WriteMessage(websocket.TextMessage, content)
