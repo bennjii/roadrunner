@@ -40,7 +40,7 @@ static LANGUAGES: Map<&'static str, LanguageExecutor> = phf_map! {
     "rust" => lang::rust::run,
     "c" => lang::c::run,
     "cpp" => lang::cpp::run,
-   "go" => lang::go::run,
+    "go" => lang::go::run,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

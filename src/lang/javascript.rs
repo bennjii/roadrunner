@@ -34,7 +34,7 @@ pub fn run(exec: &MutexGuard<Executor>) -> Result<ChildWrapper, RuntimeError> {
         Ok(val) => val,
         Err(err) => {
             return Err(RuntimeError::InitializationFailure(format!(
-                "Command: 'bun app.js' in '{}': {}",
+                "Command: 'bun run app.js' in '{}': {}",
                 file_dir, err
             )))
         }
