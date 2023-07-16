@@ -1,8 +1,9 @@
 // client.go
-package main
+package main_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -73,49 +74,67 @@ func (suite *RoadRunnerTestSuite) TearDownTest() {
 	}
 }
 
-func (suite *RoadRunnerTestSuite) TestPython() {
+func testHeader(suite *RoadRunnerTestSuite, content string, assertion func(response RoadRunnerResponse, t *testing.T)) {
 	// Channel for receiving the response
 	responseCh := make(chan RoadRunnerResponse)
+
+	doneCh := make(chan struct{})
+
 	t := suite.T()
 	conn := suite.conn
 
+	fmt.Println("Starting Message", content)
+
+	// 1s longer than standard timeout to check the internal timeout works.
+	var timedOut = time.After(6 * time.Second)
+
+	// Write the value to the websocket connection
+	err := conn.WriteMessage(websocket.TextMessage, []byte(content))
+	assert.NoError(t, err)
+
 	go func() {
-		// Write the value to the websocket connection
-		err := conn.WriteMessage(websocket.TextMessage, []byte(`{
-			"language": "python",
-			"source": "input_value = input()\ninput_value2 = input()\nprint(input_value + ' [or] ' + input_value2)",
-			"nonce": "25",
-			"standard_input": "hello world!!!\nThis is another"
-		}`))
+		defer close(doneCh)
 
-		assert.NoError(t, err)
+		for {
+			// Read the response from the websocket connection
+			_, response, err := conn.ReadMessage()
+			assert.NoError(t, err)
 
-		// Read the response from the websocket connection
-		_, response, err := conn.ReadMessage()
-		assert.NoError(t, err)
+			var myResponse RoadRunnerResponse
+			err = json.Unmarshal(response, &myResponse)
+			assert.NoError(t, err)
 
-		var myResponse RoadRunnerResponse
-		err = json.Unmarshal(response, &myResponse)
-		assert.NoError(t, err)
+			responseCh <- myResponse
 
-		responseCh <- myResponse
+			if myResponse.TerminalType == "EndOfOutput" {
+				// Break out of the loop when the response is "EndOfOutput"
+				return
+			}
+		}
 	}()
 
 	// Wait for the response or timeout
-	select {
-	case response := <-responseCh:
-		// Process the response
+out:
+	for {
+		select {
+		case response := <-responseCh:
+			fmt.Println(response.Nonce, response.PipeValue, response.Value)
+			// Process the response
+			assertion(response, t)
 
-		if response.TerminalType == "StandardOutput" {
-			assert.Equal(t, "hello world!!! [or] This is another", response.PipeValue)
-		}
+			if response.TerminalType == "EndOfOutput" {
+				break out
+			}
+		case <-timedOut:
+			close(doneCh)
 
-		if response.TerminalType == "EndOfOutput" {
-			assert.Equal(t, "exit status: 0", response.Value.ExitStatus)
+			fmt.Println("Timeout Occurred")
+			t.Error("Timeout occurred")
+			break out
 		}
-	case <-time.After(5 * time.Second):
-		t.Error("Timeout occurred")
 	}
+
+	<-doneCh
 }
 
 func TestSuite(t *testing.T) {

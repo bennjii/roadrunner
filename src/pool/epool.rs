@@ -154,9 +154,9 @@ impl Pool {
         .await
         .unwrap();
 
-        if std::fs::remove_dir_all(file_dir).is_ok() {
-            println!("[POOL]: Cleaned Directory after execution")
-        }
+        // if std::fs::remove_dir_all(file_dir).is_ok() {
+        //     println!("[POOL]: Cleaned Directory after execution")
+        // }
 
         feed
     }

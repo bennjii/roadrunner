@@ -69,9 +69,9 @@ async fn client_connection(ws: WebSocket, config: Locked<GlobalState>) {
         client_msg(client.clone(), msg, &config).await;
     }
 
-    if std::fs::remove_dir_all(format!("jobs/{}", id)).is_ok() {
-        println!("[POOL]: Cleaned Directory for user-leave")
-    }
+    // if std::fs::remove_dir_all(format!("jobs/{}", id)).is_ok() {
+    //     println!("[POOL]: Cleaned Directory for user-leave")
+    // }
 
     config.lock().await.clients.lock().await.remove(id);
 }
