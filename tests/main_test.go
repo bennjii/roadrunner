@@ -37,6 +37,8 @@ var done chan interface{}
 var interrupt chan os.Signal
 
 func (suite *RoadRunnerTestSuite) SetupTest() {
+	suite.T().Parallel()
+
 	done = make(chan interface{})    // Channel to indicate that the receiverHandler is done
 	interrupt = make(chan os.Signal) // Channel to listen for interrupt signal to terminate gracefully
 
