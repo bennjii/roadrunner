@@ -3,13 +3,14 @@ mod lang;
 mod pool;
 mod runner;
 mod ws;
+mod config;
 
 pub use chrono;
 use pool::Pool;
 use runner::{GlobalState, Locked};
 use serde_json::from_str;
 
-use std::{convert::Infallible, sync::Arc};
+use std::{convert::Infallible, fs, sync::Arc};
 use tokio::sync::Mutex;
 use warp::Filter;
 use clap::{Parser};
@@ -39,22 +40,38 @@ async fn main() {
     if args.config.is_some() {
         let config_file = args.config;
 
-        println!("cfg; {}", config_file.unwrap());
+        match fs::read(config_file.unwrap()) {
+            Ok(file) => {
+                let config: config::types::ProgramConfiguration = serde_yaml::from_str(
+                    &String::from_utf8(file).unwrap()
+                )
+                    .expect("");
 
-        if let Some(excluded_categories) = args.exclude {
-            println!("Excluding categories: {:?}", excluded_categories);
-            // Handle excluding categories
+                println!("{:?}", config);
+
+                if let Some(excluded_categories) = args.exclude {
+                    println!("Excluding categories: {:?}", excluded_categories);
+                    // Handle excluding categories
+                }
+
+                if let Some(included_categories) = args.include {
+                    println!("Including categories: {:?}", included_categories);
+                    // Handle including categories
+                }
+
+                println!("Loading configuration.");
+                loop {}
+            }
+            Err(e) => {
+                panic!("Unable to load file, {}", e);
+            }
         }
-
-        if let Some(included_categories) = args.include {
-            println!("Including categories: {:?}", included_categories);
-            // Handle including categories
-        }
-
-        println!("Loading configuration.");
-        loop {}
     } else {
-        start_webserver(config).await;
+        if args.include.is_some() || args.exclude.is_some() {
+            panic!("Unable to exclude or include configuration in webserver mode.");
+        } else {
+            start_webserver(config).await;
+        }
     }
 }
 
