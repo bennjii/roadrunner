@@ -8,3 +8,4 @@ mod go;
 mod javascript;
 mod python;
 mod rust;
+mod shell;

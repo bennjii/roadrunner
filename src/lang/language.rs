@@ -41,6 +41,7 @@ static LANGUAGES: Map<&'static str, LanguageExecutor> = phf_map! {
     "c" => lang::c::run,
     "cpp" => lang::cpp::run,
     "go" => lang::go::run,
+    "shell" => lang::shell::run
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +69,7 @@ pub enum Languages {
     Go,
     C,
     Cpp,
+    Shell,
 }
 
 impl Languages {
@@ -79,6 +81,7 @@ impl Languages {
             Self::Go => "go",
             Self::C => "c",
             Self::Cpp => "cpp",
+            Self::Shell => "shell"
         }
     }
 
@@ -90,6 +93,7 @@ impl Languages {
             "go" => Self::Go,
             "c" => Self::C,
             "cpp" => Self::Cpp,
+            "shell" => Self::Shell,
             _ => Self::Python,
         }
     }
