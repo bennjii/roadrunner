@@ -14,6 +14,8 @@ use std::{convert::Infallible, fs, sync::Arc};
 use tokio::sync::Mutex;
 use warp::Filter;
 use clap::{Parser};
+use crate::config::ConfigurationGroup;
+
 #[derive(Parser, Debug)]
 #[command(name = "roadrunner", about = "Code execution and orchestration engine")]
 struct Args {
@@ -42,24 +44,66 @@ async fn main() {
 
         match fs::read(config_file.unwrap()) {
             Ok(file) => {
-                let config: config::types::ProgramConfiguration = serde_yaml::from_str(
+                let mut config_file: config::types::ProgramConfiguration = serde_yaml::from_str(
                     &String::from_utf8(file).unwrap()
                 )
                     .expect("");
 
-                println!("{:?}", config);
-
                 if let Some(excluded_categories) = args.exclude {
                     println!("Excluding categories: {:?}", excluded_categories);
-                    // Handle excluding categories
+
+                    for category in excluded_categories {
+                        config_file.remove(&category);
+                    }
                 }
 
+                // TODO: Implement
                 if let Some(included_categories) = args.include {
                     println!("Including categories: {:?}", included_categories);
                     // Handle including categories
                 }
 
-                println!("Loading configuration.");
+                println!("{:?}", config_file);
+
+                let mut service_groups = vec![];
+
+                for key in config_file.keys() {
+                    let mut group = ConfigurationGroup::new(key);
+
+                    for service in config_file.get(key) {
+                        for service_internal in service {
+                            for service_name in service_internal {
+                                group.add_service(
+                                    service_name.0,
+                                    service_name.1.clone()
+                                );
+                            }
+                        }
+                    }
+
+                    service_groups.push(group);
+                }
+
+                // Inject each service into runner
+                for service in service_groups {
+                    for item in service.services {
+                        let executor = item.1.batch();
+
+                        config
+                            .lock()
+                            .await
+                            .task_queue
+                            .lock()
+                            .await
+                            .push_back(Arc::new(Mutex::new(executor)));
+                    }
+                }
+
+                println!("Loading configuration, starting services.");
+
+                tokio::spawn(async move { Pool::new().begin(config).await });
+
+                // Wait until stopped.
                 loop {}
             }
             Err(e) => {

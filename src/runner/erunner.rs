@@ -48,7 +48,7 @@ impl GlobalState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Runner {
     pub id: Uuid,
     pub nonce: String,
