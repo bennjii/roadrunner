@@ -3,20 +3,123 @@ mod lang;
 mod pool;
 mod runner;
 mod ws;
+mod config;
 
 pub use chrono;
 use pool::Pool;
 use runner::{GlobalState, Locked};
 use serde_json::from_str;
 
-use std::{convert::Infallible, sync::Arc};
+use std::{convert::Infallible, fs, sync::Arc};
 use tokio::sync::Mutex;
 use warp::Filter;
+use clap::{Parser};
+use crate::config::ConfigurationGroup;
+
+#[derive(Parser, Debug)]
+#[command(name = "roadrunner", about = "Code execution and orchestration engine")]
+struct Args {
+    /// Sets the configuration file (Relative or Absolute Path)
+    #[clap(short, long, value_name = "FILE")]
+    config: Option<String>,
+
+    /// Blacklist categories (Comma Separated)
+    #[clap(long, value_name = "CATEGORIES")]
+    exclude: Option<Vec<String>>,
+
+    /// Whitelist categories (Comma Separated)
+    #[clap(long, value_name = "CATEGORIES")]
+    include: Option<Vec<String>>,
+}
 
 #[tokio::main]
 async fn main() {
     let config: Locked<GlobalState> = Arc::new(Mutex::new(GlobalState::initialize()));
+    dotenv::dotenv().ok();
 
+    let args = Args::parse();
+
+    if args.config.is_some() {
+        let config_file = args.config;
+
+        match fs::read(config_file.unwrap()) {
+            Ok(file) => {
+                let mut config_file: config::types::ProgramConfiguration = serde_yaml::from_str(
+                    &String::from_utf8(file).unwrap()
+                )
+                    .expect("");
+
+                if let Some(excluded_categories) = args.exclude {
+                    println!("Excluding categories: {:?}", excluded_categories);
+
+                    for category in excluded_categories {
+                        config_file.remove(&category);
+                    }
+                }
+
+                // TODO: Implement
+                if let Some(included_categories) = args.include {
+                    println!("Including categories: {:?}", included_categories);
+                    // Handle including categories
+                }
+
+                println!("{:?}", config_file);
+
+                let mut service_groups = vec![];
+
+                for key in config_file.keys() {
+                    let mut group = ConfigurationGroup::new(key);
+
+                    for service in config_file.get(key) {
+                        for service_internal in service {
+                            for service_name in service_internal {
+                                group.add_service(
+                                    service_name.0,
+                                    service_name.1.clone()
+                                );
+                            }
+                        }
+                    }
+
+                    service_groups.push(group);
+                }
+
+                // Inject each service into runner
+                for service in service_groups {
+                    for item in service.services {
+                        let executor = item.1.batch();
+
+                        config
+                            .lock()
+                            .await
+                            .task_queue
+                            .lock()
+                            .await
+                            .push_back(Arc::new(Mutex::new(executor)));
+                    }
+                }
+
+                println!("Loading configuration, starting services.");
+
+                tokio::spawn(async move { Pool::new().begin(config).await });
+
+                // Wait until stopped.
+                loop {}
+            }
+            Err(e) => {
+                panic!("Unable to load file, {}", e);
+            }
+        }
+    } else {
+        if args.include.is_some() || args.exclude.is_some() {
+            panic!("Unable to exclude or include configuration in webserver mode.");
+        } else {
+            start_webserver(config).await;
+        }
+    }
+}
+
+async fn start_webserver(config: Locked<GlobalState>) {
     let ws_route = warp::path::path("ws")
         .and(warp::ws())
         .and(with_config(config.clone()))
@@ -30,19 +133,11 @@ async fn main() {
         .or(echo_route)
         .with(warp::cors().allow_any_origin());
 
-    dotenv::dotenv().ok();
-    // let _certificate = dotenv::var("CERTIFICATE").unwrap();
-    // let _private_key = dotenv::var("PRIVATE_KEY").unwrap();
     let port: u16 = from_str::<u16>(&dotenv::var("PORT").unwrap()).unwrap();
 
     println!("Deploying on 0.0.0.0:{}", port);
 
     warp::serve(routes)
-        // .tls()
-        // .cert(certificate)
-        // .key(private_key)
-        // .cert_path("/run/secrets/certificate")
-        // .key_path("/run/secrets/private_key")
         .run(([0, 0, 0, 0], port))
         .await;
 }

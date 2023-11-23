@@ -6,7 +6,7 @@ use tokio::sync::broadcast;
 use tokio::sync::broadcast::{Receiver, Sender};
 use uuid::Uuid;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Arguments {
     pub argument_count: i32,
     pub arguments: Vec<String>,
@@ -76,7 +76,7 @@ pub struct TerminalFeed {
     pub output: Vec<TerminalStream>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Timing {
     pub time_received: Option<DateTime<Utc>>,
     pub time_executed: Option<DateTime<Utc>>,
@@ -91,6 +91,7 @@ pub struct ExecutorBuilder {
     nonce: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct Executor {
     pub id: Uuid,
     pub nonce: Option<String>,

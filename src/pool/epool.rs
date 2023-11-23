@@ -4,7 +4,10 @@ use crate::runner::{GlobalState, Locked};
 
 use futures_timer::Delay;
 use std::time::Duration;
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::task::JoinError;
+use tokio::time::error::Error;
 use warp::ws::Message;
 
 #[derive(Copy, Clone)]
@@ -40,13 +43,23 @@ impl Pool {
                             .sender
                             .clone();
 
+                        // let (sender,  r) = mpsc::unbounded_channel::<Message>();
+
                         println!("[POOL]: Got sender, starting!");
                         let task_copy = task.clone();
 
                         config_lock.runtime.lock().await.spawn(async move {
                             let value = self.execute(task_copy, sender).await;
-                            println!("[POOL]: Ended with output, {:?}", value);
-                            task.lock().await.terminal_feed = value;
+
+                            match value {
+                                Ok(feed) => {
+                                    println!("[POOL]: Ended with output, {:?}", feed);
+                                    task.lock().await.terminal_feed = feed;
+                                }
+                                Err(error) => {
+                                    println!("[POOL]: Failed with output, {:?}", error);
+                                }
+                            }
                         });
                     } else {
                         // Sleep Queue
@@ -65,7 +78,7 @@ impl Pool {
         &self,
         locked_task: Locked<Executor>,
         sender: UnboundedSender<Message>,
-    ) -> TerminalFeed {
+    ) -> Result<TerminalFeed, JoinError> {
         let mut tx2 = locked_task.lock().await.broadcast.0.clone().subscribe();
         println!("[EXEC]: Performing task from sender");
 
@@ -151,8 +164,7 @@ impl Pool {
 
             feed
         })
-        .await
-        .unwrap();
+        .await;
 
         if std::fs::remove_dir_all(file_dir).is_ok() {
             println!("[POOL]: Cleaned Directory after execution")

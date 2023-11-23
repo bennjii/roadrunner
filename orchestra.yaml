@@ -1,0 +1,28 @@
+databases:
+  - stock-database:
+      command: "cd ./open-stock && docker run ."
+      restart_on_panic: false
+
+  - core-database:
+      command: "cd ./open-core && docker run ."
+      restart_on_panic: false
+
+servers:
+  - open-stock:
+      command: "cd ./open-stock && cargo watch -x run"
+      restart_on_panic: true
+      restart_limit: 10
+
+  - open-core:
+      command: "cd ./open-core && cargo watch -x run"
+      restart_on_panic: true
+      restart_limit: 10
+
+webservers:
+  - open-pos:
+      command: "cd ./open-pos && bun run dev"
+      restart_on_panic: true
+
+  - open-admin:
+      command: "cd ./open-admin && bun run dev"
+      restart_on_panic: true

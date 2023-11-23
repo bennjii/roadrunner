@@ -41,6 +41,7 @@ static LANGUAGES: Map<&'static str, LanguageExecutor> = phf_map! {
     "c" => lang::c::run,
     "cpp" => lang::cpp::run,
     "go" => lang::go::run,
+    "shell" => lang::shell::run
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,7 +60,7 @@ impl RuntimeError {
     }
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum Languages {
     Python,
@@ -68,6 +69,7 @@ pub enum Languages {
     Go,
     C,
     Cpp,
+    Shell,
 }
 
 impl Languages {
@@ -79,6 +81,7 @@ impl Languages {
             Self::Go => "go",
             Self::C => "c",
             Self::Cpp => "cpp",
+            Self::Shell => "shell"
         }
     }
 
@@ -90,6 +93,7 @@ impl Languages {
             "go" => Self::Go,
             "c" => Self::C,
             "cpp" => Self::Cpp,
+            "shell" => Self::Shell,
             _ => Self::Python,
         }
     }
@@ -160,17 +164,30 @@ impl Languages {
 
                 let stdout_thread = tokio::spawn(async move {
                     let mut stdout_lines = BufReader::new(child_stdout).lines();
-                    loop {
-                        if let Some(line) = stdout_lines.next_line().await.unwrap() {
-                            println!("[OKAY_OUTPUT]: {}", line);
 
-                            match stdout_sender.send(TerminalStream::new(
-                                TerminalStreamType::StandardOutput,
-                                line,
-                                stdout_nonce.clone(),
-                            )) {
-                                Ok(val) => println!("[TERM]: Sent output size {}", val),
-                                Err(err) => println!("[TERM]: Failed to send output {:?}", err),
+                    loop {
+                        match stdout_lines.next_line().await {
+                            Ok(line) => {
+                                match line {
+                                    Some(line_value) => {
+                                        println!("[OKAY_OUTPUT]: {}", line_value);
+
+                                        match stdout_sender.send(TerminalStream::new(
+                                            TerminalStreamType::StandardOutput,
+                                            line_value,
+                                            stdout_nonce.clone(),
+                                        )) {
+                                            Ok(val) => println!("[TERM]: Sent output size {}", val),
+                                            Err(err) => println!("[TERM]: Failed to send output {:?}", err),
+                                        }
+                                    }
+                                    None => {
+                                        println!("Consumed nothing.");
+                                    }
+                                }
+                            }
+                            Err(error) => {
+                                println!("Could not consume, {}", error);
                             }
                         }
                     }
@@ -210,7 +227,8 @@ impl Languages {
                                 });
                             }
                             None => {
-                                if execution.start_time.elapsed().ge(&standard_timeout) {
+                                if execution.start_time.elapsed().ge(&standard_timeout)
+                                    && exec.language != Languages::Shell {
                                     // Has run for too long, kill it.
                                     let _ = execution.child.start_kill();
                                 }

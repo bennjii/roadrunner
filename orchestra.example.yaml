@@ -1,0 +1,27 @@
+session:
+  - databases:
+      - database1:
+          command: "docker run ./segment1/DockerfileDatabase1"
+          restart_on_panic: false
+
+      - database2:
+          command: "docker run ./segment2/DockerfileDatabase2"
+          restart_on_panic: false
+
+  - servers:
+      - server1:
+          command: "cd ./segment1 && cargo watch -x run"
+          restart_on_panic: true
+          restart_limit: 10
+
+      - server2:
+          command: "cd ./segment2 && cargo watch -x run"
+          restart_on_panic: true
+          restart_limit: 10
+
+  - webservers:
+      - webserver1:
+          command: "cd ./webserver && bun run dev"
+
+      - webserver2:
+          command: "cd ./webserver && bun run dev"
